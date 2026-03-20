@@ -1,11 +1,12 @@
 {
   "name": "openfused",
-  "version": "0.2.1",
-  "description": "Decentralized context mesh for AI agents. Persistent memory, signed messaging, FUSE filesystem. The protocol is files.",
+  "version": "0.3.0",
+  "description": "Decentralized context mesh for AI agents. Encrypted sync, signed messaging, MCP server. The protocol is files.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "openfuse": "./dist/cli.js"
+    "openfuse": "./dist/cli.js",
+    "openfuse-mcp": "./dist/mcp.js"
   },
   "main": "./dist/store.js",
   "types": "./dist/store.d.ts",
@@ -23,9 +24,11 @@
     "start": "node dist/cli.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "chokidar": "^4.0.0",
     "commander": "^13.0.0",
-    "nanoid": "^5.1.0"
+    "nanoid": "^5.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.19.15",

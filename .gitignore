@@ -6,5 +6,6 @@ dist/
 daemon/target/
 rust/target/
 .peers/
+mesh-alice/
 mesh/*/inbox/
 mesh/*/outbox/
