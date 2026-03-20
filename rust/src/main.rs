@@ -574,21 +574,21 @@ async fn main() -> Result<()> {
                 eprintln!("No context store found. Run `openfuse init` first.");
                 std::process::exit(1);
             }
-            let reg = registry::registry_path(reg_flag.as_deref());
-            let manifest = registry::register(&s, &endpoint, &reg)?;
+            let reg = registry::resolve_registry(reg_flag.as_deref());
+            let manifest = registry::register(&s, &endpoint, &reg).await?;
             let verified = if manifest.signature.is_some() { " [SIGNED]" } else { "" };
             println!("Registered: {}{}", manifest.name, verified);
             println!("  Endpoint:    {}", manifest.endpoint);
             println!("  Fingerprint: {}", manifest.fingerprint);
-            println!("  Registry:    {}", reg.display());
+            println!("  Registry:    {}", reg);
         }
 
         Commands::Discover {
             name,
             registry: reg_flag,
         } => {
-            let reg = registry::registry_path(reg_flag.as_deref());
-            let manifest = registry::discover(&name, &reg)?;
+            let reg = registry::resolve_registry(reg_flag.as_deref());
+            let manifest = registry::discover(&name, &reg).await?;
             let verified = registry::verify_manifest(&manifest);
             let sig_status = if verified {
                 "[SIGNED ✓]"
@@ -625,8 +625,8 @@ async fn main() -> Result<()> {
             let config = s.read_config()?;
 
             // Try to resolve via registry first
-            let reg = registry::registry_path(reg_flag.as_deref());
-            if let Ok(manifest) = registry::discover(&name, &reg) {
+            let reg = registry::resolve_registry(reg_flag.as_deref());
+            if let Ok(manifest) = registry::discover(&name, &reg).await {
                 // Auto-import key into keyring if not already there
                 let already = config.keyring.iter().any(|e| e.signing_key == manifest.public_key);
                 if !already {
