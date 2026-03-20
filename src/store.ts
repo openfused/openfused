@@ -20,7 +20,7 @@ export interface PeerConfig {
   mountPath?: string;
 }
 
-const STORE_DIRS = ["history", "knowledge", "inbox", "shared"];
+const STORE_DIRS = ["history", "knowledge", "inbox", "outbox", "shared"];
 
 export class ContextStore {
   readonly root: string;
@@ -100,10 +100,11 @@ export class ContextStore {
   async sendInbox(peerId: string, message: string): Promise<void> {
     const config = await this.readConfig();
     const signed = await signMessage(this.root, config.id, message);
-    const inboxDir = join(this.root, "inbox");
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `${timestamp}_${peerId}.json`;
-    await writeFile(join(inboxDir, filename), serializeSignedMessage(signed));
+    // Write to inbox (for the recipient) and outbox (our copy)
+    await writeFile(join(this.root, "inbox", filename), serializeSignedMessage(signed));
+    await writeFile(join(this.root, "outbox", filename), serializeSignedMessage(signed));
   }
 
   async readInbox(): Promise<Array<{
