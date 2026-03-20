@@ -1,6 +1,6 @@
 {
   "name": "openfused",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Persistent, shareable, portable context for AI agents. Decentralized mesh via files.",
   "license": "MIT",
   "type": "module",
