@@ -1,0 +1,7 @@
+{
+  "from": "Bw6cOtuu-WL2",
+  "timestamp": "2026-03-20T08:08:19.846Z",
+  "message": "TASK: Key Interop (v0.3 roadmap item). Normalize ed25519 key format between Rust and TypeScript implementations. Currently TS uses PEM-wrapped keys (.keys/public.pem, .keys/private.pem) and Rust uses raw hex (.keys/public.key, .keys/private.key). They need to use the same format so agents initialized with one runtime can verify messages from the other. Pick one format (recommend raw hex — simpler, no PEM overhead) and update both implementations. Files: src/crypto.ts (TS), rust/src/crypto.rs (Rust). Codebase is at /home/node/.openclaw/workspace/openfused.",
+  "signature": "6aOmyjpFrGM75FiQPaNw0M+Rn7pDyNfM3PVMS2+k/Hludt0DnyNbKylsdl+1Xora/BFZbQtM2x2JLIbS7SyDCA==",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAb7QrRqjWkMkxp7NhmsEPDB5HqJDF6rxSO17rLkXkU00=\n-----END PUBLIC KEY-----\n"
+}

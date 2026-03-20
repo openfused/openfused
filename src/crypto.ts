@@ -17,28 +17,35 @@ export async function generateKeys(storeRoot: string): Promise<{ publicKey: stri
   const keyDir = join(storeRoot, KEY_DIR);
   await mkdir(keyDir, { recursive: true });
 
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519", {
-    publicKeyEncoding: { type: "spki", format: "pem" },
-    privateKeyEncoding: { type: "pkcs8", format: "pem" },
-  });
+  const { publicKey: pubObj, privateKey: privObj } = generateKeyPairSync("ed25519");
 
-  await writeFile(join(keyDir, "public.pem"), publicKey, { mode: 0o644 });
-  await writeFile(join(keyDir, "private.pem"), privateKey, { mode: 0o600 });
+  const pubJwk = pubObj.export({ format: "jwk" }) as { x: string };
+  const privJwk = privObj.export({ format: "jwk" }) as { d: string; x: string };
 
-  return { publicKey, privateKey };
+  // Store raw key bytes as hex strings (same format as Rust implementation)
+  const publicHex = Buffer.from(pubJwk.x, "base64url").toString("hex");
+  const privateHex = Buffer.from(privJwk.d, "base64url").toString("hex");
+
+  await writeFile(join(keyDir, "public.key"), publicHex, { mode: 0o644 });
+  await writeFile(join(keyDir, "private.key"), privateHex, { mode: 0o600 });
+
+  return { publicKey: publicHex, privateKey: privateHex };
 }
 
 export async function hasKeys(storeRoot: string): Promise<boolean> {
-  return existsSync(join(storeRoot, KEY_DIR, "private.pem"));
+  return existsSync(join(storeRoot, KEY_DIR, "private.key"));
 }
 
 async function loadPrivateKey(storeRoot: string) {
-  const pem = await readFile(join(storeRoot, KEY_DIR, "private.pem"), "utf-8");
-  return createPrivateKey(pem);
+  const privHex = (await readFile(join(storeRoot, KEY_DIR, "private.key"), "utf-8")).trim();
+  const pubHex = (await readFile(join(storeRoot, KEY_DIR, "public.key"), "utf-8")).trim();
+  const d = Buffer.from(privHex, "hex").toString("base64url");
+  const x = Buffer.from(pubHex, "hex").toString("base64url");
+  return createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", d, x }, format: "jwk" });
 }
 
 async function loadPublicKey(storeRoot: string): Promise<string> {
-  return readFile(join(storeRoot, KEY_DIR, "public.pem"), "utf-8");
+  return (await readFile(join(storeRoot, KEY_DIR, "public.key"), "utf-8")).trim();
 }
 
 export async function signMessage(storeRoot: string, from: string, message: string): Promise<SignedMessage> {
@@ -55,7 +62,8 @@ export async function signMessage(storeRoot: string, from: string, message: stri
 export function verifyMessage(signed: SignedMessage): boolean {
   try {
     const payload = Buffer.from(`${signed.from}\n${signed.timestamp}\n${signed.message}`);
-    const pubKey = createPublicKey(signed.publicKey);
+    const x = Buffer.from(signed.publicKey.trim(), "hex").toString("base64url");
+    const pubKey = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x }, format: "jwk" });
     return verify(null, payload, pubKey, Buffer.from(signed.signature, "base64"));
   } catch {
     return false;

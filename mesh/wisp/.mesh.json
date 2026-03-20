@@ -1,0 +1,10 @@
+{
+  "id": "Bw6cOtuu-WL2",
+  "name": "wisp",
+  "created": "2026-03-20T08:07:29.125Z",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAb7QrRqjWkMkxp7NhmsEPDB5HqJDF6rxSO17rLkXkU00=\n-----END PUBLIC KEY-----\n",
+  "peers": [],
+  "trustedKeys": [
+    "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEARwGkOHzhrGHJdFIyfNrfrvyidyLUy1BfX1iDOiLLgEA=\n-----END PUBLIC KEY-----"
+  ]
+}
