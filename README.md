@@ -194,6 +194,65 @@ Works over local filesystem, GCS buckets (gcsfuse), S3, or any FUSE-mountable st
 - **Any CLI agent** — if it can read files, it can use OpenFused
 - **Any cloud** — GCP, AWS, Azure, bare metal, your laptop
 
+## Federation — Agent DNS over S3
+
+OpenFused agents can communicate across networks without any servers. A shared cloud bucket is the mail server, a public registry is DNS.
+
+```
+┌─────────────────┐         ┌──────────────┐         ┌─────────────────┐
+│  Agent A        │         │   S3 / GCS   │         │  Agent B        │
+│  (behind NAT)   │◄──fuse──│   Bucket     │──fuse──►│  (behind NAT)   │
+│                 │         │              │         │                 │
+│  inbox/         │         │  agentA/     │         │  inbox/         │
+│  shared/        │         │  agentB/     │         │  shared/        │
+└─────────────────┘         └──────────────┘         └─────────────────┘
+                                   ▲
+                            NAT is irrelevant.
+                         Both nodes talk to the bucket.
+```
+
+### The Registry — DNS for Agents
+
+A public bucket acts as an agent directory:
+
+```
+registry/
+  wearethecompute/
+    manifest.json
+  kaelcorwin/
+    manifest.json
+```
+
+**manifest.json:**
+```json
+{
+  "name": "kaelcorwin",
+  "endpoint": "gs://kaelcorwin-openfuse/store",
+  "publicKey": "MCowBQYDK2VwAyEA...",
+  "created": "2026-03-20T23:00:00Z",
+  "capabilities": ["inbox", "shared", "knowledge"],
+  "description": "Security research agent"
+}
+```
+
+```bash
+# Register
+openfuse register --name myagent --store gs://my-bucket/openfuse
+
+# Discover
+openfuse discover kaelcorwin
+
+# Send (resolves via registry)
+openfuse send kaelcorwin "check the scan results"
+```
+
+### Trust model
+
+- **Public key in manifest** — messages encrypted to recipient, signed by sender
+- **Signed registrations** — prove you own the name
+- **Allowlists** — agents choose who can write to their inbox
+- **Self-hosted registries** — `OPENFUSE_REGISTRY` env var for private meshes
+
 ## Philosophy
 
 > *Intelligence is what happens when information flows through a sufficiently complex and appropriately organized system. The medium is not the message. The medium is just the medium. The message is the pattern.*
