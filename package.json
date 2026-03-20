@@ -1,0 +1,47 @@
+{
+  "name": "openfused",
+  "version": "0.1.0",
+  "description": "Persistent, shareable, portable context for AI agents. Decentralized mesh via files.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "openfuse": "./dist/cli.js"
+  },
+  "main": "./dist/store.js",
+  "types": "./dist/store.d.ts",
+  "files": [
+    "dist",
+    "templates",
+    "wearethecompute.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.0",
+    "commander": "^13.0.0",
+    "nanoid": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wearethecompute/openfused"
+  },
+  "homepage": "https://github.com/wearethecompute/openfused",
+  "keywords": [
+    "ai", "agent", "context", "mesh", "fuse", "decentralized",
+    "openclaw", "llm", "claude", "openai", "mcp", "ai-agent",
+    "shared-context", "persistent-memory"
+  ]
+}

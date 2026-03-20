@@ -1,0 +1,3 @@
+node_modules/\ndist/\n*.log\n.env
+node_modules/
+dist/
