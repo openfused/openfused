@@ -1,4 +1,5 @@
 mod crypto;
+mod registry;
 mod store;
 mod sync;
 mod watch;
@@ -80,6 +81,37 @@ enum Commands {
         dir: PathBuf,
         /// Sync only this peer (by name or ID)
         peer: Option<String>,
+    },
+    /// Register this agent in the registry (agent DNS)
+    Register {
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// Endpoint URL where peers can reach this agent
+        #[arg(short, long)]
+        endpoint: String,
+        /// Registry path (default: ~/.openfuse/registry or OPENFUSE_REGISTRY env)
+        #[arg(short, long)]
+        registry: Option<String>,
+    },
+    /// Look up an agent by name in the registry
+    Discover {
+        /// Agent name to look up
+        name: String,
+        /// Registry path
+        #[arg(short, long)]
+        registry: Option<String>,
+    },
+    /// Send a message to an agent (resolves via registry or peers)
+    Send {
+        /// Agent name (resolved via registry) or peer name
+        name: String,
+        /// Message content
+        message: String,
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// Registry path
+        #[arg(short, long)]
+        registry: Option<String>,
     },
 }
 
@@ -529,6 +561,133 @@ async fn main() -> Result<()> {
 
             if results.is_empty() {
                 println!("No peers configured. Add one with: openfuse peer add <url>");
+            }
+        }
+
+        Commands::Register {
+            dir,
+            endpoint,
+            registry: reg_flag,
+        } => {
+            let s = store::ContextStore::new(&dir);
+            if !s.exists() {
+                eprintln!("No context store found. Run `openfuse init` first.");
+                std::process::exit(1);
+            }
+            let reg = registry::registry_path(reg_flag.as_deref());
+            let manifest = registry::register(&s, &endpoint, &reg)?;
+            let verified = if manifest.signature.is_some() { " [SIGNED]" } else { "" };
+            println!("Registered: {}{}", manifest.name, verified);
+            println!("  Endpoint:    {}", manifest.endpoint);
+            println!("  Fingerprint: {}", manifest.fingerprint);
+            println!("  Registry:    {}", reg.display());
+        }
+
+        Commands::Discover {
+            name,
+            registry: reg_flag,
+        } => {
+            let reg = registry::registry_path(reg_flag.as_deref());
+            let manifest = registry::discover(&name, &reg)?;
+            let verified = registry::verify_manifest(&manifest);
+            let sig_status = if verified {
+                "[SIGNED ✓]"
+            } else if manifest.signature.is_some() {
+                "[SIGNED ✗ invalid]"
+            } else {
+                "[unsigned]"
+            };
+            println!("{}  {}", manifest.name, sig_status);
+            println!("  Endpoint:       {}", manifest.endpoint);
+            println!("  Signing key:    {}", manifest.public_key);
+            if let Some(ref ek) = manifest.encryption_key {
+                println!("  Encryption key: {}", ek);
+            }
+            println!("  Fingerprint:    {}", manifest.fingerprint);
+            println!("  Capabilities:   {}", manifest.capabilities.join(", "));
+            if let Some(ref desc) = manifest.description {
+                println!("  Description:    {}", desc);
+            }
+            println!("  Created:        {}", manifest.created);
+        }
+
+        Commands::Send {
+            name,
+            message,
+            dir,
+            registry: reg_flag,
+        } => {
+            let s = store::ContextStore::new(&dir);
+            if !s.exists() {
+                eprintln!("No context store found. Run `openfuse init` first.");
+                std::process::exit(1);
+            }
+            let config = s.read_config()?;
+
+            // Try to resolve via registry first
+            let reg = registry::registry_path(reg_flag.as_deref());
+            if let Ok(manifest) = registry::discover(&name, &reg) {
+                // Auto-import key into keyring if not already there
+                let already = config.keyring.iter().any(|e| e.signing_key == manifest.public_key);
+                if !already {
+                    let mut config = config.clone();
+                    config.keyring.push(crypto::KeyringEntry {
+                        name: manifest.name.clone(),
+                        address: format!("{}@registry", manifest.name),
+                        signing_key: manifest.public_key.clone(),
+                        encryption_key: manifest.encryption_key.clone(),
+                        fingerprint: manifest.fingerprint.clone(),
+                        trusted: true, // Auto-trust from signed manifest
+                        added: chrono::Utc::now().to_rfc3339(),
+                    });
+                    s.write_config(&config)?;
+                    println!("Imported key for {} from registry", manifest.name);
+                }
+
+                // Send the message (auto-encrypts if age key available)
+                s.send_inbox(&name, &message, &config.id)?;
+
+                // Try to deliver via sync if endpoint is http:// or ssh://
+                let endpoint = &manifest.endpoint;
+                if endpoint.starts_with("http://") || endpoint.starts_with("https://")
+                    || endpoint.starts_with("ssh://")
+                {
+                    // Add as temporary peer and sync
+                    let mut config = s.read_config()?;
+                    let had_peer = config.peers.iter().any(|p| p.name == name);
+                    if !had_peer {
+                        config.peers.push(store::PeerConfig {
+                            id: nanoid::nanoid!(12),
+                            name: name.clone(),
+                            url: endpoint.clone(),
+                            access: "readwrite".to_string(),
+                            mount_path: None,
+                        });
+                        s.write_config(&config)?;
+                    }
+                    match sync::sync_one(&s, &name).await {
+                        Ok(r) => {
+                            if !r.pushed.is_empty() {
+                                println!("Delivered to {}: {}", name, r.pushed.join(", "));
+                            }
+                            if !r.errors.is_empty() {
+                                for e in &r.errors {
+                                    eprintln!("  warning: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("Message queued in outbox (delivery failed: {})", e);
+                        }
+                    }
+                } else {
+                    println!("Message queued in outbox for {} (endpoint: {})", name, endpoint);
+                    println!("Mount the endpoint and sync, or manually copy from outbox/");
+                }
+            } else {
+                // Not in registry — try as a peer name
+                s.send_inbox(&name, &message, &config.id)?;
+                println!("Message sent to {}'s outbox. Run `openfuse sync` to deliver.", name);
             }
         }
     }
