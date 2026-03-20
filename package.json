@@ -1,6 +1,6 @@
 {
   "name": "openfused",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Persistent, shareable, portable context for AI agents. Decentralized mesh via files.",
   "license": "MIT",
   "type": "module",
@@ -28,7 +28,7 @@
     "nanoid": "^5.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.19.15",
     "typescript": "^5.9.3"
   },
   "engines": {
@@ -36,12 +36,23 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/wearethecompute/openfused"
+    "url": "git+https://github.com/wearethecompute/openfused.git"
   },
   "homepage": "https://github.com/wearethecompute/openfused",
   "keywords": [
-    "ai", "agent", "context", "mesh", "fuse", "decentralized",
-    "openclaw", "llm", "claude", "openai", "mcp", "ai-agent",
-    "shared-context", "persistent-memory"
+    "ai",
+    "agent",
+    "context",
+    "mesh",
+    "fuse",
+    "decentralized",
+    "openclaw",
+    "llm",
+    "claude",
+    "openai",
+    "mcp",
+    "ai-agent",
+    "shared-context",
+    "persistent-memory"
   ]
 }

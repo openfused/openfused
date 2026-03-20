@@ -71,7 +71,8 @@ program
       console.log("Context updated.");
     } else if (opts.append) {
       const existing = await store.readContext();
-      await store.writeContext(existing + "\n" + opts.append);
+      const text = opts.append.replace(/\\n/g, "\n");
+      await store.writeContext(existing + "\n" + text);
       console.log("Context appended.");
     } else {
       const content = await store.readContext();
