@@ -8,13 +8,13 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-const VERSION: &str = "0.3.0";
+const VERSION: &str = "0.3.2";
 
 #[derive(Parser)]
 #[command(
     name = "openfuse",
     about = "Decentralized context mesh for AI agents. The protocol is files.",
-    version = "0.3.0"
+    version = "0.3.2"
 )]
 struct Cli {
     #[command(subcommand)]
