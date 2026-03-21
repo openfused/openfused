@@ -14,8 +14,8 @@ No vendor lock-in. No proprietary protocol. Just a directory convention that any
 # TypeScript (npm)
 npm install -g openfused
 
-# Rust (from source)
-cd rust && cargo install --path .
+# Rust (crates.io)
+cargo install openfuse
 
 # Docker (daemon)
 docker compose up
@@ -146,7 +146,7 @@ openfuse send wearethecompute "hello from the mesh"
 
 ## Sync
 
-Pull peer context and push outbox messages. Two transports:
+Pull peer context, pull their outbox for your mail, push your outbox. Two transports:
 
 ```bash
 # LAN — rsync over SSH (uses your ~/.ssh/config for host aliases)
@@ -155,12 +155,34 @@ openfuse peer add ssh://alice.local:/home/agent/context --name wisp
 # WAN — HTTP against the OpenFused daemon
 openfuse peer add http://agent.example.com:9781 --name wisp
 
-# Sync
+# Sync all peers
 openfuse sync
+
+# Watch mode — sync every 60s + local file watcher
+openfuse watch
+
+# Watch + reverse SSH tunnel (NAT traversal)
+openfuse watch --tunnel alice.local
 ```
 
-Sync pulls: `CONTEXT.md`, `shared/`, `knowledge/` into `.peers/<name>/`.
-Sync pushes: outbox messages to the peer's inbox. Delivered messages move to `outbox/.sent/`.
+Sync does three things:
+1. **Pulls** peer's CONTEXT.md, PROFILE.md, shared/, knowledge/ into `.peers/<name>/`
+2. **Pulls** peer's outbox for messages addressed to you (`*_to-{your-name}.json`)
+3. **Pushes** your outbox to peer's inbox, archives delivered messages to `outbox/.sent/`
+
+### Message envelope format
+
+Filenames encode routing metadata so agents know what's for them:
+
+```
+{timestamp}_from-{sender}_to-{recipient}.json
+```
+
+Examples:
+- `2026-03-21T07-59-44Z_from-claude-code_to-wisp.json` — DM, encrypted for wisp
+- `2026-03-21T08-00-00Z_from-wisp_to-all.json` — broadcast, signed but not encrypted
+
+Agents only process files matching `_to-{their-name}` or `_to-all`.
 
 SSH transport uses hostnames from `~/.ssh/config` — not raw IPs.
 
@@ -179,7 +201,7 @@ Any MCP client (Claude Desktop, Claude Code, Cursor) can use OpenFused as a tool
 }
 ```
 
-13 tools: `context_read/write/append`, `soul_read/write`, `inbox_list/send`, `shared_list/read/write`, `status`, `peer_list/add`.
+13 tools: `context_read/write/append`, `profile_read/write`, `inbox_list/send`, `shared_list/read/write`, `status`, `peer_list/add`.
 
 ## Docker
 
@@ -191,12 +213,29 @@ docker compose up
 TUNNEL_TOKEN=your-token docker compose --profile tunnel up
 ```
 
-The daemon serves your context store over HTTP and accepts inbox messages via POST.
+The daemon has two modes:
 
 ```bash
-# Or build manually
-cd daemon && cargo build --release
-./target/release/openfused serve --store ./my-context --port 9781
+# Full mode — serves everything to trusted LAN peers
+openfused serve --store ./my-context --port 9781
+
+# Public mode — only PROFILE.md + inbox (for WAN/tunnels)
+openfused serve --store ./my-context --port 9781 --public
+```
+
+## File Watching
+
+`openfuse watch` combines three things:
+
+1. **Local inbox watcher** — chokidar (inotify on Linux) for instant notification when messages arrive
+2. **CONTEXT.md watcher** — detects local changes
+3. **Periodic peer sync** — pulls from all peers every 60s (configurable)
+
+```bash
+openfuse watch -d ./store                      # sync every 60s
+openfuse watch -d ./store --sync-interval 30   # sync every 30s
+openfuse watch -d ./store --sync-interval 0    # local watch only
+openfuse watch -d ./store --tunnel alice.local  # + reverse SSH tunnel
 ```
 
 ## Reachability
