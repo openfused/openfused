@@ -18,6 +18,9 @@ interface Manifest {
   description?: string;
   signature?: string;
   signedAt?: string;
+  revoked?: boolean;
+  revokedAt?: string;
+  rotatedFrom?: string; // previous key that authorized the rotation
 }
 
 export default {
@@ -74,6 +77,18 @@ export default {
         }
 
         return result;
+      }
+
+      // POST /revoke — revoke an agent's key (signed by the key being revoked)
+      if (path === "/revoke" && request.method === "POST") {
+        const body = await request.text();
+        return await revokeAgent(env, body);
+      }
+
+      // POST /rotate — rotate to a new key (signed by the old key)
+      if (path === "/rotate" && request.method === "POST") {
+        const body = await request.text();
+        return await rotateKey(env, body);
       }
 
       return json({ error: "Not found" }, 404);
@@ -148,6 +163,9 @@ async function registerAgent(env: Env, body: string): Promise<Response> {
   const existing = await env.REGISTRY.get(`${safeName}/manifest.json`);
   if (existing) {
     const old: Manifest = JSON.parse(await existing.text());
+    if (old.revoked) {
+      return json({ error: `Name '${safeName}' has been revoked and cannot be re-registered` }, 410);
+    }
     if (old.publicKey !== manifest.publicKey) {
       return json(
         { error: `Name '${safeName}' is already registered to a different key (fingerprint: ${old.fingerprint})` },
@@ -165,6 +183,111 @@ async function registerAgent(env: Env, body: string): Promise<Response> {
     fingerprint: manifest.fingerprint,
     endpoint: manifest.endpoint,
   }, existing ? 200 : 201);
+}
+
+// --- Revocation ---
+
+async function revokeAgent(env: Env, body: string): Promise<Response> {
+  let req: { name: string; signature: string; signedAt: string };
+  try {
+    req = JSON.parse(body);
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+
+  if (!req.name || !req.signature || !req.signedAt) {
+    return json({ error: "Missing required fields: name, signature, signedAt" }, 400);
+  }
+
+  const safeName = req.name.replace(/[^a-zA-Z0-9_-]/g, "");
+  const obj = await env.REGISTRY.get(`${safeName}/manifest.json`);
+  if (!obj) {
+    return json({ error: `Agent '${safeName}' not found` }, 404);
+  }
+
+  const manifest: Manifest = JSON.parse(await obj.text());
+
+  if (manifest.revoked) {
+    return json({ error: "Already revoked" }, 410);
+  }
+
+  // Verify: must be signed by the registered key
+  const payload = `${req.name}\n${req.signedAt}\nREVOKE:${manifest.publicKey}`;
+  const valid = await verifyEd25519(payload, req.signature, manifest.publicKey);
+  if (!valid) {
+    return json({ error: "Invalid signature — revocation must be signed by the registered key" }, 403);
+  }
+
+  // Mark as revoked
+  manifest.revoked = true;
+  manifest.revokedAt = new Date().toISOString();
+  await env.REGISTRY.put(`${safeName}/manifest.json`, JSON.stringify(manifest, null, 2));
+
+  return json({ ok: true, name: safeName, status: "revoked" });
+}
+
+// --- Key Rotation ---
+
+async function rotateKey(env: Env, body: string): Promise<Response> {
+  let req: {
+    name: string;
+    newPublicKey: string;
+    newEncryptionKey?: string;
+    newFingerprint: string;
+    newEndpoint?: string;
+    signature: string;   // signed by OLD key
+    signedAt: string;
+  };
+  try {
+    req = JSON.parse(body);
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+
+  if (!req.name || !req.newPublicKey || !req.newFingerprint || !req.signature || !req.signedAt) {
+    return json({ error: "Missing required fields" }, 400);
+  }
+
+  const safeName = req.name.replace(/[^a-zA-Z0-9_-]/g, "");
+  const obj = await env.REGISTRY.get(`${safeName}/manifest.json`);
+  if (!obj) {
+    return json({ error: `Agent '${safeName}' not found` }, 404);
+  }
+
+  const manifest: Manifest = JSON.parse(await obj.text());
+
+  if (manifest.revoked) {
+    return json({ error: "Cannot rotate a revoked key" }, 410);
+  }
+
+  // Verify: rotation must be signed by the CURRENT (old) key
+  const payload = `${req.name}\n${req.signedAt}\nROTATE:${manifest.publicKey}:${req.newPublicKey}`;
+  const valid = await verifyEd25519(payload, req.signature, manifest.publicKey);
+  if (!valid) {
+    return json({ error: "Invalid signature — rotation must be signed by the current registered key" }, 403);
+  }
+
+  // Update manifest with new key
+  const oldKey = manifest.publicKey;
+  manifest.publicKey = req.newPublicKey;
+  manifest.fingerprint = req.newFingerprint;
+  manifest.rotatedFrom = oldKey;
+  if (req.newEncryptionKey) {
+    manifest.encryptionKey = req.newEncryptionKey;
+  }
+  if (req.newEndpoint) {
+    manifest.endpoint = req.newEndpoint;
+  }
+
+  await env.REGISTRY.put(`${safeName}/manifest.json`, JSON.stringify(manifest, null, 2));
+
+  return json({
+    ok: true,
+    name: safeName,
+    oldFingerprint: manifest.rotatedFrom,
+    newFingerprint: req.newFingerprint,
+    status: "rotated",
+  });
 }
 
 // --- Ed25519 verification using Web Crypto ---

@@ -103,6 +103,20 @@ enum Commands {
         #[arg(short, long)]
         registry: Option<String>,
     },
+    /// Revoke this agent's key in the registry (irreversible)
+    Revoke {
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        #[arg(short, long)]
+        registry: Option<String>,
+    },
+    /// Rotate to a new keypair (old key signs the transition)
+    Rotate {
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        #[arg(short, long)]
+        registry: Option<String>,
+    },
     /// Send a message to an agent (resolves via registry or peers)
     Send {
         /// Agent name (resolved via registry) or peer name
@@ -571,6 +585,43 @@ async fn main() -> Result<()> {
             }
         }
 
+        Commands::Revoke {
+            dir,
+            registry: reg_flag,
+        } => {
+            let s = store::ContextStore::new(&dir);
+            if !s.exists() {
+                eprintln!("No context store found.");
+                std::process::exit(1);
+            }
+            let config = s.read_config()?;
+            let reg = registry::resolve_registry(reg_flag.as_deref());
+            let fp = crypto::fingerprint(config.public_key.as_deref().unwrap_or(""));
+            eprintln!("WARNING: This will permanently revoke your key ({}).", fp);
+            eprintln!("Your name '{}' will be marked as revoked and cannot be re-registered.", config.name);
+            registry::revoke(&s, &reg).await?;
+            println!("Key revoked: {} ({})", config.name, fp);
+        }
+
+        Commands::Rotate {
+            dir,
+            registry: reg_flag,
+        } => {
+            let s = store::ContextStore::new(&dir);
+            if !s.exists() {
+                eprintln!("No context store found.");
+                std::process::exit(1);
+            }
+            let reg = registry::resolve_registry(reg_flag.as_deref());
+            let (new_fp, old_key) = registry::rotate(&s, &reg).await?;
+            let old_fp = crypto::fingerprint(&old_key);
+            println!("Key rotated:");
+            println!("  Old: {}", old_fp);
+            println!("  New: {}", new_fp);
+            println!("\nPeers with your old key will need to re-import. Run:");
+            println!("  openfuse register --endpoint <your-endpoint>");
+        }
+
         Commands::Register {
             dir,
             endpoint,
@@ -597,7 +648,10 @@ async fn main() -> Result<()> {
             let reg = registry::resolve_registry(reg_flag.as_deref());
             let manifest = registry::discover(&name, &reg).await?;
             let verified = registry::verify_manifest(&manifest);
-            let sig_status = if verified {
+            let revoked = manifest.revoked.unwrap_or(false);
+            let sig_status = if revoked {
+                "[REVOKED]"
+            } else if verified {
                 "[SIGNED ✓]"
             } else if manifest.signature.is_some() {
                 "[SIGNED ✗ invalid]"
@@ -605,6 +659,14 @@ async fn main() -> Result<()> {
                 "[unsigned]"
             };
             println!("{}  {}", manifest.name, sig_status);
+            if revoked {
+                if let Some(ref at) = manifest.revoked_at {
+                    println!("  ⚠ KEY REVOKED at {}", at);
+                }
+            }
+            if let Some(ref from) = manifest.rotated_from {
+                println!("  Rotated from:   {}", crypto::fingerprint(from));
+            }
             println!("  Endpoint:       {}", manifest.endpoint);
             println!("  Signing key:    {}", manifest.public_key);
             if let Some(ref ek) = manifest.encryption_key {

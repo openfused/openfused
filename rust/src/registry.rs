@@ -34,6 +34,15 @@ pub struct Manifest {
     /// Timestamp used during signing (needed to verify)
     #[serde(rename = "signedAt", skip_serializing_if = "Option::is_none")]
     pub signed_at: Option<String>,
+    /// True if this key has been revoked
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revoked: Option<bool>,
+    /// When the key was revoked
+    #[serde(rename = "revokedAt", skip_serializing_if = "Option::is_none")]
+    pub revoked_at: Option<String>,
+    /// Previous key that authorized a rotation to current key
+    #[serde(rename = "rotatedFrom", skip_serializing_if = "Option::is_none")]
+    pub rotated_from: Option<String>,
 }
 
 /// Resolve registry target from flag, env var, or default.
@@ -78,6 +87,9 @@ pub fn build_manifest(store: &ContextStore, endpoint: &str) -> Result<Manifest> 
         description: None,
         signature: None,
         signed_at: None,
+        revoked: None,
+        revoked_at: None,
+        rotated_from: None,
     };
 
     // Sign the manifest
@@ -231,6 +243,9 @@ async fn list_http(registry: &str) -> Result<Vec<Manifest>> {
                     description: None,
                     signature: None,
                     signed_at: None,
+                    revoked: None,
+                    revoked_at: None,
+                    rotated_from: None,
                 });
             }
         }
@@ -256,6 +271,139 @@ pub fn verify_manifest(manifest: &Manifest) -> bool {
         encrypted: false,
     };
     crypto::verify_message(&signed)
+}
+
+/// Revoke this agent's key in the registry.
+pub async fn revoke(store: &ContextStore, registry: &str) -> Result<()> {
+    let config = store.read_config()?;
+    let name = &config.name;
+
+    let public_key = config
+        .public_key
+        .as_deref()
+        .context("No signing key")?;
+
+    // Sign the revocation message
+    let revoke_msg = format!("REVOKE:{}", public_key);
+    let signed = crypto::sign_message(store.root(), name, &revoke_msg)?;
+
+    if is_http(registry) {
+        let client = reqwest::Client::new();
+        let url = format!("{}/revoke", registry.trim_end_matches('/'));
+        let body = serde_json::json!({
+            "name": name,
+            "signature": signed.signature,
+            "signedAt": signed.timestamp,
+        });
+        let resp = client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to connect to registry")?;
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        if !status.is_success() {
+            let err = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| v["error"].as_str().map(String::from))
+                .unwrap_or(text);
+            anyhow::bail!("Revocation failed: {}", err);
+        }
+    } else {
+        // Local registry: mark manifest as revoked
+        let manifest_path = Path::new(registry).join(name).join("manifest.json");
+        let raw = fs::read_to_string(&manifest_path)?;
+        let mut manifest: Manifest = serde_json::from_str(&raw)?;
+        manifest.revoked = Some(true);
+        manifest.revoked_at = Some(chrono::Utc::now().to_rfc3339());
+        let json = serde_json::to_string_pretty(&manifest)?;
+        fs::write(&manifest_path, format!("{}\n", json))?;
+    }
+
+    Ok(())
+}
+
+/// Rotate this agent's key: generate new keypair, sign rotation with old key.
+pub async fn rotate(store: &ContextStore, registry: &str) -> Result<(String, String)> {
+    let config = store.read_config()?;
+    let name = &config.name;
+
+    let old_key = config
+        .public_key
+        .as_deref()
+        .context("No signing key")?
+        .to_string();
+
+    // Generate new keys in a temp dir, sign rotation with OLD key, then swap
+    let tmp_dir = store.root().join(".keys-new");
+    fs::create_dir_all(&tmp_dir)?;
+    let (new_pub, new_enc) = crypto::generate_keys(&tmp_dir)?;
+    let new_fp = crypto::fingerprint(&new_pub);
+
+    // Sign rotation with the OLD key (still in .keys/)
+    let rotate_msg = format!("ROTATE:{}:{}", old_key, new_pub);
+    let signed = crypto::sign_message(store.root(), name, &rotate_msg)?;
+
+    if is_http(registry) {
+        let client = reqwest::Client::new();
+        let url = format!("{}/rotate", registry.trim_end_matches('/'));
+        let body = serde_json::json!({
+            "name": name,
+            "newPublicKey": new_pub,
+            "newEncryptionKey": new_enc,
+            "newFingerprint": new_fp,
+            "signature": signed.signature,
+            "signedAt": signed.timestamp,
+        });
+        let resp = client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to connect to registry")?;
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        if !status.is_success() {
+            // Clean up temp keys
+            let _ = fs::remove_dir_all(&tmp_dir);
+            let err = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| v["error"].as_str().map(String::from))
+                .unwrap_or(text);
+            anyhow::bail!("Rotation failed: {}", err);
+        }
+    } else {
+        // Local registry: update manifest
+        let manifest_path = Path::new(registry).join(name).join("manifest.json");
+        let raw = fs::read_to_string(&manifest_path)?;
+        let mut manifest: Manifest = serde_json::from_str(&raw)?;
+        manifest.rotated_from = Some(old_key.clone());
+        manifest.public_key = new_pub.clone();
+        manifest.encryption_key = Some(new_enc.clone());
+        manifest.fingerprint = new_fp.clone();
+        let json = serde_json::to_string_pretty(&manifest)?;
+        fs::write(&manifest_path, format!("{}\n", json))?;
+    }
+
+    // Swap keys: move .keys-new/* to .keys/
+    let key_dir = store.root().join(".keys");
+    for file in &["private.key", "public.key", "age.key", "age.pub"] {
+        let src = tmp_dir.join(file);
+        let dst = key_dir.join(file);
+        if src.exists() {
+            fs::rename(&src, &dst)?;
+        }
+    }
+    let _ = fs::remove_dir_all(&tmp_dir);
+
+    // Update local config
+    let mut config = store.read_config()?;
+    config.public_key = Some(new_pub.clone());
+    config.encryption_key = Some(new_enc.clone());
+    store.write_config(&config)?;
+
+    Ok((new_fp, old_key))
 }
 
 /// Check if a newer version is available. Non-blocking, best-effort.
