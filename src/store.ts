@@ -1,15 +1,21 @@
-import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
-import { generateKeys, hasKeys, signMessage, verifyMessage, deserializeSignedMessage, serializeSignedMessage, wrapExternalMessage, type SignedMessage } from "./crypto.js";
+import {
+  generateKeys, hasKeys, signMessage, signAndEncrypt, verifyMessage, decryptMessage,
+  deserializeSignedMessage, serializeSignedMessage, wrapExternalMessage,
+  fingerprint, type SignedMessage, type KeyringEntry,
+} from "./crypto.js";
 
 export interface MeshConfig {
   id: string;
   name: string;
   created: string;
   publicKey?: string;
+  encryptionKey?: string;
   peers: PeerConfig[];
-  trustedKeys?: string[];
+  keyring: KeyringEntry[];
+  trustedKeys?: string[]; // legacy, migrated to keyring
 }
 
 export interface PeerConfig {
@@ -20,7 +26,7 @@ export interface PeerConfig {
   mountPath?: string;
 }
 
-const STORE_DIRS = ["history", "knowledge", "inbox", "outbox", "shared"];
+const STORE_DIRS = ["history", "knowledge", "inbox", "outbox", "shared", ".peers"];
 
 export class ContextStore {
   readonly root: string;
@@ -38,7 +44,6 @@ export class ContextStore {
   }
 
   async init(name: string, id: string): Promise<void> {
-    // Create directory structure
     await mkdir(this.root, { recursive: true });
     for (const dir of STORE_DIRS) {
       await mkdir(join(this.root, dir), { recursive: true });
@@ -55,24 +60,45 @@ export class ContextStore {
       }
     }
 
-    // Generate signing keypair
     const keys = await generateKeys(this.root);
 
-    // Write mesh config
     const config: MeshConfig = {
       id,
       name,
       created: new Date().toISOString(),
       publicKey: keys.publicKey,
+      encryptionKey: keys.encryptionKey,
       peers: [],
-      trustedKeys: [],
+      keyring: [],
     };
     await this.writeConfig(config);
   }
 
   async readConfig(): Promise<MeshConfig> {
     const raw = await readFile(this.configPath, "utf-8");
-    return JSON.parse(raw) as MeshConfig;
+    const config = JSON.parse(raw) as MeshConfig;
+
+    // Migrate legacy trustedKeys → keyring
+    if (config.trustedKeys && config.trustedKeys.length > 0) {
+      if (!config.keyring) config.keyring = [];
+      for (const key of config.trustedKeys) {
+        const k = key.trim();
+        if (!k || config.keyring.some((e) => e.signingKey === k)) continue;
+        config.keyring.push({
+          name: `migrated-${k.slice(0, 8)}`,
+          address: "",
+          signingKey: k,
+          fingerprint: fingerprint(k),
+          trusted: true,
+          added: new Date().toISOString(),
+        });
+      }
+      delete config.trustedKeys;
+      await this.writeConfig(config);
+    }
+
+    if (!config.keyring) config.keyring = [];
+    return config;
   }
 
   async writeConfig(config: MeshConfig): Promise<void> {
@@ -95,15 +121,25 @@ export class ContextStore {
     await writeFile(join(this.root, "SOUL.md"), content);
   }
 
-  // --- Inbox (signed messages) ---
+  // --- Inbox ---
 
   async sendInbox(peerId: string, message: string): Promise<void> {
     const config = await this.readConfig();
-    const signed = await signMessage(this.root, config.id, message);
+
+    // Look up peer's encryption key in keyring
+    const entry = config.keyring.find(
+      (e) => e.name === peerId || e.address.startsWith(`${peerId}@`)
+    );
+
+    let signed: SignedMessage;
+    if (entry?.encryptionKey) {
+      signed = await signAndEncrypt(this.root, config.id, message, entry.encryptionKey);
+    } else {
+      signed = await signMessage(this.root, config.id, message);
+    }
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `${timestamp}_${peerId}.json`;
-    // Write to inbox (for the recipient) and outbox (our copy)
-    await writeFile(join(this.root, "inbox", filename), serializeSignedMessage(signed));
     await writeFile(join(this.root, "outbox", filename), serializeSignedMessage(signed));
   }
 
@@ -114,6 +150,7 @@ export class ContextStore {
     from: string;
     time: string;
     verified: boolean;
+    encrypted: boolean;
   }>> {
     const inboxDir = join(this.root, "inbox");
     if (!existsSync(inboxDir)) return [];
@@ -125,21 +162,35 @@ export class ContextStore {
     for (const file of files.filter((f) => f.endsWith(".json") || f.endsWith(".md"))) {
       const raw = await readFile(join(inboxDir, file), "utf-8");
 
-      // Try parsing as signed message
       const signed = deserializeSignedMessage(raw);
       if (signed) {
-        const verified = verifyMessage(signed);
-        const trusted = config.trustedKeys?.some(k => k.trim() === signed.publicKey.trim()) ?? false;
+        const sigValid = verifyMessage(signed);
+        const trusted = config.keyring.some(
+          (k) => k.trusted && k.signingKey.trim() === signed.publicKey.trim()
+        );
+        const verified = sigValid && trusted;
+
+        let content: string;
+        if (signed.encrypted) {
+          try {
+            content = await decryptMessage(this.root, signed);
+          } catch {
+            content = "[encrypted — cannot decrypt]";
+          }
+        } else {
+          content = signed.message;
+        }
+
         messages.push({
           file,
-          content: signed.message,
-          wrappedContent: wrapExternalMessage(signed, verified && trusted),
+          content,
+          wrappedContent: wrapExternalMessage(signed, verified),
           from: signed.from,
           time: signed.timestamp,
-          verified: verified && trusted,
+          verified,
+          encrypted: !!signed.encrypted,
         });
       } else {
-        // Unsigned message — mark as unverified
         const parts = file.replace(/\.(md|json)$/, "").split("_");
         const from = parts.slice(1).join("_");
         messages.push({
@@ -147,11 +198,12 @@ export class ContextStore {
           content: raw,
           wrappedContent: wrapExternalMessage(
             { from, timestamp: parts[0], message: raw, signature: "", publicKey: "" },
-            false
+            false,
           ),
           from,
           time: parts[0],
           verified: false,
+          encrypted: false,
         });
       }
     }

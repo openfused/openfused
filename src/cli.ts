@@ -4,19 +4,25 @@ import { Command } from "commander";
 import { nanoid } from "nanoid";
 import { ContextStore } from "./store.js";
 import { watchInbox, watchContext } from "./watch.js";
+import { syncAll, syncOne } from "./sync.js";
+import * as registry from "./registry.js";
+import { fingerprint } from "./crypto.js";
 import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+
+const VERSION = "0.3.0";
 
 const program = new Command();
 
 program
   .name("openfuse")
   .description("Decentralized context mesh for AI agents. The protocol is files.")
-  .version("0.2.1");
+  .version(VERSION);
 
 // --- init ---
 program
   .command("init")
-  .description("Initialize a new context store in the current directory")
+  .description("Initialize a new context store")
   .option("-n, --name <name>", "Agent name", "agent")
   .option("-d, --dir <path>", "Directory to init", ".")
   .action(async (opts) => {
@@ -27,18 +33,13 @@ program
     }
     const id = nanoid(12);
     await store.init(opts.name, id);
-    console.log(`Initialized context store: ${store.root}`);
     const config = await store.readConfig();
+    console.log(`Initialized context store: ${store.root}`);
     console.log(`  Agent ID: ${id}`);
     console.log(`  Name: ${opts.name}`);
-    console.log(`  Signing keys: generated (.keys/)`);
-    console.log(`\nStructure:`);
-    console.log(`  CONTEXT.md  — working memory (edit this)`);
-    console.log(`  SOUL.md     — agent identity & rules`);
-    console.log(`  inbox/      — messages from other agents`);
-    console.log(`  shared/     — files shared with the mesh`);
-    console.log(`  knowledge/  — persistent knowledge base`);
-    console.log(`  history/    — conversation & decision logs`);
+    console.log(`  Signing key: ${config.publicKey}`);
+    console.log(`  Encryption key: ${config.encryptionKey}`);
+    console.log(`  Fingerprint: ${fingerprint(config.publicKey!)}`);
   });
 
 // --- status ---
@@ -57,6 +58,11 @@ program
     console.log(`Peers: ${s.peers}`);
     console.log(`Inbox: ${s.inboxCount} messages`);
     console.log(`Shared: ${s.sharedCount} files`);
+
+    const latest = await registry.checkUpdate(VERSION);
+    if (latest) {
+      console.error(`\n  Update available: ${VERSION} → ${latest} — https://github.com/wearethecompute/openfused/releases`);
+    }
   });
 
 // --- context ---
@@ -77,8 +83,7 @@ program
       await store.writeContext(existing + "\n" + text);
       console.log("Context appended.");
     } else {
-      const content = await store.readContext();
-      console.log(content);
+      console.log(await store.readContext());
     }
   });
 
@@ -94,8 +99,7 @@ program
       await store.writeSoul(opts.set);
       console.log("Soul updated.");
     } else {
-      const content = await store.readSoul();
-      console.log(content);
+      console.log(await store.readSoul());
     }
   });
 
@@ -116,7 +120,8 @@ inbox
     }
     for (const msg of messages) {
       const badge = msg.verified ? "[VERIFIED]" : "[UNVERIFIED]";
-      console.log(`\n--- ${badge} From: ${msg.from} | ${msg.time} ---`);
+      const enc = msg.encrypted ? " [ENCRYPTED]" : "";
+      console.log(`\n--- ${badge}${enc} From: ${msg.from} | ${msg.time} ---`);
       console.log(opts.raw ? msg.content : msg.wrappedContent);
     }
   });
@@ -128,7 +133,7 @@ inbox
   .action(async (peerId, message, opts) => {
     const store = new ContextStore(resolve(opts.dir));
     await store.sendInbox(peerId, message);
-    console.log(`Message sent to ${peerId}'s inbox.`);
+    console.log(`Message sent to ${peerId}'s outbox.`);
   });
 
 // --- watch ---
@@ -145,17 +150,13 @@ program
     const config = await store.readConfig();
     console.log(`Watching context store: ${config.name} (${config.id})`);
     console.log(`Press Ctrl+C to stop.\n`);
-
     watchInbox(store.root, (from, message) => {
       console.log(`\n[inbox] New message from ${from}:`);
       console.log(message);
     });
-
     watchContext(store.root, () => {
       console.log(`\n[context] CONTEXT.md updated`);
     });
-
-    // Keep alive
     await new Promise(() => {});
   });
 
@@ -166,7 +167,6 @@ program
   .option("-d, --dir <path>", "Context store directory", ".")
   .action(async (file, opts) => {
     const store = new ContextStore(resolve(opts.dir));
-    const { readFile } = await import("node:fs/promises");
     const content = await readFile(resolve(file), "utf-8");
     const filename = file.split("/").pop()!;
     await store.share(filename, content);
@@ -194,7 +194,7 @@ peer
 
 peer
   .command("add <url>")
-  .description("Add a peer by URL")
+  .description("Add a peer by URL (http:// for WAN, ssh://host:/path for LAN)")
   .option("-d, --dir <path>", "Context store directory", ".")
   .option("-n, --name <name>", "Peer name")
   .option("-a, --access <mode>", "Access mode: read or readwrite", "read")
@@ -214,7 +214,7 @@ peer
 
 peer
   .command("remove <id>")
-  .description("Remove a peer by ID")
+  .description("Remove a peer by ID or name")
   .option("-d, --dir <path>", "Context store directory", ".")
   .action(async (id, opts) => {
     const store = new ContextStore(resolve(opts.dir));
@@ -224,37 +224,232 @@ peer
     console.log(`Removed peer: ${id}`);
   });
 
-peer
-  .command("trust <publicKeyFile>")
-  .description("Trust a peer's public key (messages from them will show as verified)")
-  .option("-d, --dir <path>", "Context store directory", ".")
-  .action(async (publicKeyFile, opts) => {
-    const store = new ContextStore(resolve(opts.dir));
-    const config = await store.readConfig();
-    const { readFile } = await import("node:fs/promises");
-    const pubKey = (await readFile(resolve(publicKeyFile), "utf-8")).trim();
-    if (!config.trustedKeys) config.trustedKeys = [];
-    if (config.trustedKeys.includes(pubKey)) {
-      console.log("Key already trusted.");
-      return;
-    }
-    config.trustedKeys.push(pubKey);
-    await store.writeConfig(config);
-    console.log("Key trusted. Messages signed with this key will show as [VERIFIED].");
-  });
-
 // --- key ---
-program
-  .command("key")
-  .description("Show this agent's public key (share with peers so they can trust you)")
+const key = program.command("key").description("Manage keys and keyring");
+
+key
+  .command("show")
+  .description("Show this agent's public keys")
   .option("-d, --dir <path>", "Context store directory", ".")
   .action(async (opts) => {
     const store = new ContextStore(resolve(opts.dir));
     const config = await store.readConfig();
-    if (config.publicKey) {
-      console.log(config.publicKey);
-    } else {
-      console.error("No keys found. Run `openfuse init` first.");
+    console.log(`Signing key:    ${config.publicKey ?? "(none)"}`);
+    console.log(`Encryption key: ${config.encryptionKey ?? "(none)"}`);
+    console.log(`Fingerprint:    ${fingerprint(config.publicKey ?? "")}`);
+  });
+
+key
+  .command("list")
+  .description("List all keys in the keyring (like gpg --list-keys)")
+  .option("-d, --dir <path>", "Context store directory", ".")
+  .action(async (opts) => {
+    const store = new ContextStore(resolve(opts.dir));
+    const config = await store.readConfig();
+    console.log(`${config.name}  (self)`);
+    console.log(`  signing:    ${config.publicKey}`);
+    console.log(`  encryption: ${config.encryptionKey}`);
+    console.log(`  fingerprint: ${fingerprint(config.publicKey ?? "")}\n`);
+
+    if (config.keyring.length === 0) {
+      console.log("Keyring is empty. Import keys with: openfuse key import <name> <keyfile>");
+      return;
+    }
+    for (const e of config.keyring) {
+      const trust = e.trusted ? "[TRUSTED]" : "[untrusted]";
+      const addr = e.address || "(no address)";
+      console.log(`${e.name}  ${addr}  ${trust}`);
+      console.log(`  signing:    ${e.signingKey}`);
+      console.log(`  encryption: ${e.encryptionKey ?? "(no age key)"}`);
+      console.log(`  fingerprint: ${e.fingerprint}\n`);
+    }
+  });
+
+key
+  .command("import <name> <signingKeyFile>")
+  .description("Import a peer's signing key")
+  .option("-d, --dir <path>", "Context store directory", ".")
+  .option("-e, --encryption-key <key>", "age encryption key (age1...)")
+  .option("-@ , --address <addr>", "Address (e.g. wisp@alice.local)")
+  .action(async (name, signingKeyFile, opts) => {
+    const store = new ContextStore(resolve(opts.dir));
+    const config = await store.readConfig();
+    const signingKey = (await readFile(resolve(signingKeyFile), "utf-8")).trim();
+    const fp = fingerprint(signingKey);
+
+    if (config.keyring.some((e) => e.signingKey === signingKey)) {
+      console.log(`Key already in keyring (fingerprint: ${fp})`);
+      return;
+    }
+
+    config.keyring.push({
+      name,
+      address: opts.address ?? "",
+      signingKey,
+      encryptionKey: opts.encryptionKey,
+      fingerprint: fp,
+      trusted: false,
+      added: new Date().toISOString(),
+    });
+    await store.writeConfig(config);
+    console.log(`Imported key for: ${name}`);
+    console.log(`  Fingerprint: ${fp}`);
+    console.log(`\nKey is NOT trusted yet. Run: openfuse key trust ${name}`);
+  });
+
+key
+  .command("trust <name>")
+  .description("Trust a key in the keyring")
+  .option("-d, --dir <path>", "Context store directory", ".")
+  .action(async (name, opts) => {
+    const store = new ContextStore(resolve(opts.dir));
+    const config = await store.readConfig();
+    const entry = config.keyring.find((e) => e.name === name || e.fingerprint === name);
+    if (!entry) {
+      console.error(`Key not found: ${name}`);
+      process.exit(1);
+    }
+    entry.trusted = true;
+    await store.writeConfig(config);
+    console.log(`Trusted: ${entry.name} (${entry.fingerprint})`);
+  });
+
+key
+  .command("untrust <name>")
+  .description("Revoke trust for a key")
+  .option("-d, --dir <path>", "Context store directory", ".")
+  .action(async (name, opts) => {
+    const store = new ContextStore(resolve(opts.dir));
+    const config = await store.readConfig();
+    const entry = config.keyring.find((e) => e.name === name || e.fingerprint === name);
+    if (!entry) {
+      console.error(`Key not found: ${name}`);
+      process.exit(1);
+    }
+    entry.trusted = false;
+    await store.writeConfig(config);
+    console.log(`Revoked trust: ${entry.name} (${entry.fingerprint})`);
+  });
+
+key
+  .command("export")
+  .description("Export this agent's public keys for sharing")
+  .option("-d, --dir <path>", "Context store directory", ".")
+  .action(async (opts) => {
+    const store = new ContextStore(resolve(opts.dir));
+    const config = await store.readConfig();
+    console.log(`# OpenFuse key export: ${config.name} (${config.id})`);
+    console.log(`# Fingerprint: ${fingerprint(config.publicKey ?? "")}`);
+    console.log(`signing:${config.publicKey}`);
+    console.log(`encryption:${config.encryptionKey}`);
+  });
+
+// --- sync ---
+program
+  .command("sync [peer]")
+  .description("Sync with peers (pull context, push outbox)")
+  .option("-d, --dir <path>", "Context store directory", ".")
+  .action(async (peerName, opts) => {
+    const store = new ContextStore(resolve(opts.dir));
+    if (!(await store.exists())) {
+      console.error("No context store found. Run `openfuse init` first.");
+      process.exit(1);
+    }
+
+    const results = peerName ? [await syncOne(store, peerName)] : await syncAll(store);
+
+    for (const r of results) {
+      console.log(`--- ${r.peerName} ---`);
+      if (r.pulled.length) console.log(`  pulled: ${r.pulled.join(", ")}`);
+      if (r.pushed.length) console.log(`  pushed: ${r.pushed.join(", ")}`);
+      for (const e of r.errors) console.error(`  error: ${e}`);
+      if (!r.pulled.length && !r.pushed.length && !r.errors.length) {
+        console.log("  (nothing to sync)");
+      }
+    }
+
+    if (results.length === 0) {
+      console.log("No peers configured. Add one with: openfuse peer add <url>");
+    }
+  });
+
+// --- register ---
+program
+  .command("register")
+  .description("Register this agent in the public registry")
+  .option("-d, --dir <path>", "Context store directory", ".")
+  .requiredOption("-e, --endpoint <url>", "Endpoint URL where peers can reach you")
+  .option("-r, --registry <url>", "Registry URL")
+  .action(async (opts) => {
+    const store = new ContextStore(resolve(opts.dir));
+    const reg = registry.resolveRegistry(opts.registry);
+    const manifest = await registry.register(store, opts.endpoint, reg);
+    console.log(`Registered: ${manifest.name} [SIGNED]`);
+    console.log(`  Endpoint:    ${manifest.endpoint}`);
+    console.log(`  Fingerprint: ${manifest.fingerprint}`);
+    console.log(`  Registry:    ${reg}`);
+  });
+
+// --- discover ---
+program
+  .command("discover <name>")
+  .description("Look up an agent by name in the registry")
+  .option("-r, --registry <url>", "Registry URL")
+  .action(async (name, opts) => {
+    const reg = registry.resolveRegistry(opts.registry);
+    const manifest = await registry.discover(name, reg);
+    const status = manifest.revoked
+      ? "[REVOKED]"
+      : manifest.signature
+        ? "[SIGNED]"
+        : "[unsigned]";
+    console.log(`${manifest.name}  ${status}`);
+    if (manifest.revoked) console.log(`  ⚠ KEY REVOKED at ${manifest.revokedAt}`);
+    if (manifest.rotatedFrom) console.log(`  Rotated from: ${fingerprint(manifest.rotatedFrom)}`);
+    console.log(`  Endpoint:       ${manifest.endpoint}`);
+    console.log(`  Signing key:    ${manifest.publicKey}`);
+    if (manifest.encryptionKey) console.log(`  Encryption key: ${manifest.encryptionKey}`);
+    console.log(`  Fingerprint:    ${manifest.fingerprint}`);
+    console.log(`  Capabilities:   ${manifest.capabilities.join(", ")}`);
+    console.log(`  Created:        ${manifest.created}`);
+  });
+
+// --- send ---
+program
+  .command("send <name> <message>")
+  .description("Send a message to an agent (resolves via registry)")
+  .option("-d, --dir <path>", "Context store directory", ".")
+  .option("-r, --registry <url>", "Registry URL")
+  .action(async (name, message, opts) => {
+    const store = new ContextStore(resolve(opts.dir));
+    const reg = registry.resolveRegistry(opts.registry);
+
+    try {
+      const manifest = await registry.discover(name, reg);
+      const config = await store.readConfig();
+
+      // Auto-import key (untrusted)
+      if (!config.keyring.some((e) => e.signingKey === manifest.publicKey)) {
+        config.keyring.push({
+          name: manifest.name,
+          address: `${manifest.name}@registry`,
+          signingKey: manifest.publicKey,
+          encryptionKey: manifest.encryptionKey,
+          fingerprint: manifest.fingerprint,
+          trusted: false,
+          added: new Date().toISOString(),
+        });
+        await store.writeConfig(config);
+        console.log(`Imported key for ${manifest.name} from registry [untrusted]`);
+        console.log(`  Run \`openfuse key trust ${manifest.name}\` to trust`);
+      }
+
+      await store.sendInbox(name, message);
+      console.log(`Message queued in outbox for ${name}. Run \`openfuse sync\` to deliver.`);
+    } catch {
+      // Not in registry — send as a peer message
+      await store.sendInbox(name, message);
+      console.log(`Message sent to ${name}'s outbox.`);
     }
   });
 

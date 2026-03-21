@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "age-encryption": "^0.3.0",
     "chokidar": "^4.0.0",
     "commander": "^13.0.0",
     "nanoid": "^5.1.0",
