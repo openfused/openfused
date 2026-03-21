@@ -10,7 +10,7 @@ use crate::store::ContextStore;
 /// Default public registry URL. The registry serves as both DNS (name→endpoint
 /// resolution) and keyserver (name→public key distribution), similar to how
 /// keys.openpgp.org combines both roles for email.
-pub const DEFAULT_REGISTRY: &str = "https://openfuse-registry.wzmcghee.workers.dev";
+pub const DEFAULT_REGISTRY: &str = "https://registry.openfused.dev";
 
 /// Agent manifest — the "DNS record" for an agent in the registry.
 #[derive(Debug, Serialize, Deserialize, Clone)]

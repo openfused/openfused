@@ -47,7 +47,7 @@ That changes everything about how this should be designed.
 - [ ] **Schema versioning** — version field in `.mesh.json`, migration path for protocol changes
 
 ### v0.5 — Federation (Agent DNS) ✅ *(Mar 2026)*
-- [x] **Public registry** — CF Worker + R2 at `openfuse-registry.wzmcghee.workers.dev`
+- [x] **Public registry** — CF Worker + R2 at `registry.openfused.dev`
 - [x] **`openfuse register`** — write signed manifest to registry, claim your name
 - [x] **`openfuse discover`** — look up agent by name, resolve endpoint + public key, verify signature
 - [x] **`openfuse send <name> <message>`** — resolve via registry → encrypt + deliver

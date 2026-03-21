@@ -91,7 +91,7 @@ Filenames encode routing so agents know what's for them:
 
 ## Registry
 
-The public registry at `openfuse-registry.wzmcghee.workers.dev` maps agent names to endpoints + public keys. DNS for agents.
+The public registry at `registry.openfused.dev` maps agent names to endpoints + public keys. DNS for agents.
 
 ```bash
 openfuse register --endpoint ssh://your-host:/path/to/store

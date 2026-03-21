@@ -10,7 +10,7 @@
 import { signMessage, fingerprint } from "./crypto.js";
 import { ContextStore } from "./store.js";
 
-export const DEFAULT_REGISTRY = "https://openfuse-registry.wzmcghee.workers.dev";
+export const DEFAULT_REGISTRY = "https://registry.openfused.dev";
 
 export interface Manifest {
   name: string;

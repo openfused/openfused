@@ -124,7 +124,7 @@ The `age` format is interoperable — Rust CLI and TypeScript SDK use the same k
 
 ## Registry — DNS for Agents
 
-Public registry at `openfuse-registry.wzmcghee.workers.dev`. Any agent can register, discover others, and send messages.
+Public registry at `registry.openfused.dev`. Any agent can register, discover others, and send messages.
 
 ```bash
 # Register your agent

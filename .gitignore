@@ -16,3 +16,4 @@ store/.peers/
 store/.mesh.json
 store/*
 !store/.gitkeep
+drafts/hn-post.md

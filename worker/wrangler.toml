@@ -6,6 +6,10 @@ compatibility_date = "2025-01-01"
 binding = "REGISTRY"
 bucket_name = "openfuse-registry"
 
+routes = [
+  { pattern = "registry.openfused.dev", custom_domain = true }
+]
+
 [vars]
 CF_ZONE_ID = "5f2ed112d6442f0b87fae503ff28a32b"
 DNS_DOMAIN = "openfused.dev"
