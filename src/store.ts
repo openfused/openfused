@@ -138,7 +138,7 @@ export class ContextStore {
 
   // --- Inbox ---
 
-  async sendInbox(peerId: string, message: string): Promise<void> {
+  async sendInbox(peerId: string, message: string): Promise<string> {
     const config = await this.readConfig();
 
     // Look up peer's encryption key in keyring
@@ -158,6 +158,7 @@ export class ContextStore {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `${timestamp}_from-${config.name}_to-${peerId}.json`;
     await writeFile(join(this.root, "outbox", filename), serializeSignedMessage(signed));
+    return filename;
   }
 
   async readInbox(): Promise<Array<{

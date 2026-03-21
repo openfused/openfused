@@ -4,7 +4,7 @@ import { Command } from "commander";
 import { nanoid } from "nanoid";
 import { ContextStore } from "./store.js";
 import { watchInbox, watchContext, watchSync } from "./watch.js";
-import { syncAll, syncOne } from "./sync.js";
+import { syncAll, syncOne, deliverOne } from "./sync.js";
 import * as registry from "./registry.js";
 import { fingerprint } from "./crypto.js";
 import { resolve } from "node:path";
@@ -132,8 +132,15 @@ inbox
   .option("-d, --dir <path>", "Context store directory", ".")
   .action(async (peerId, message, opts) => {
     const store = new ContextStore(resolve(opts.dir));
-    await store.sendInbox(peerId, message);
-    console.log(`Message sent to ${peerId}'s outbox.`);
+    const filename = await store.sendInbox(peerId, message);
+
+    // Try immediate delivery — if peer is reachable, deliver now
+    const delivered = await deliverOne(store, peerId, filename);
+    if (delivered) {
+      console.log(`Delivered to ${peerId}.`);
+    } else {
+      console.log(`Queued for ${peerId}. Will deliver on next sync.`);
+    }
   });
 
 // --- watch ---

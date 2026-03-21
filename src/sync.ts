@@ -57,6 +57,42 @@ function parseUrl(url: string): Transport {
   throw new Error(`Unknown URL scheme: ${url}. Use http:// or ssh://`);
 }
 
+/** Try to deliver a single outbox message immediately. Returns true if delivered. */
+export async function deliverOne(store: ContextStore, peerName: string, filename: string): Promise<boolean> {
+  const config = await store.readConfig();
+  const peer = config.peers.find((p) => p.name === peerName || p.id === peerName);
+  if (!peer) return false;
+
+  const outboxDir = join(store.root, "outbox");
+  const filePath = join(outboxDir, filename);
+  if (!existsSync(filePath)) return false;
+
+  try {
+    const transport = parseUrl(peer.url);
+
+    if (transport.type === "http") {
+      const body = await readFile(filePath, "utf-8");
+      const r = await fetch(`${transport.baseUrl}/inbox`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      if (!r.ok) return false;
+    } else {
+      await execFile("rsync", [
+        "-az", filePath,
+        `${transport.host}:${transport.path}/inbox/${filename}`,
+      ]);
+    }
+
+    // Delivered — archive to .sent/
+    await archiveSent(outboxDir, filename);
+    return true;
+  } catch {
+    return false; // stays in outbox for next sync
+  }
+}
+
 export async function syncAll(store: ContextStore): Promise<SyncResult[]> {
   const config = await store.readConfig();
   const results: SyncResult[] = [];
