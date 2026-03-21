@@ -145,7 +145,7 @@ async function syncHttp(
   if (existsSync(outboxDir)) {
     for (const fname of await readdir(outboxDir)) {
       if (!fname.endsWith(".json")) continue;
-      if (!fname.includes(`_to-${peer.name}`) && !fname.includes(peer.id)) continue;
+      if (!fname.includes(`_to-${peer.name}.json`) && !fname.includes(peer.id)) continue;
       try {
         const body = await readFile(join(outboxDir, fname), "utf-8");
         const r = await fetch(`${baseUrl}/inbox`, {
@@ -228,7 +228,7 @@ async function syncSsh(
   if (existsSync(outboxDir)) {
     for (const fname of await readdir(outboxDir)) {
       if (!fname.endsWith(".json")) continue;
-      if (!fname.includes(`_to-${peer.name}`) && !fname.includes(peer.id)) continue;
+      if (!fname.includes(`_to-${peer.name}.json`) && !fname.includes(peer.id)) continue;
       try {
         await execFile("rsync", ["-az", join(outboxDir, fname), `${host}:${remotePath}/inbox/${fname}`]);
         await archiveSent(outboxDir, fname);

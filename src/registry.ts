@@ -95,7 +95,7 @@ export async function discover(name: string, registry: string): Promise<Manifest
 async function discoverViaDns(dnsName: string, agentName: string): Promise<Manifest | null> {
   try {
     // Use DNS-over-HTTPS (Cloudflare 1.1.1.1) to resolve TXT records
-    const resp = await fetch(`https://1.1.1.1/dns-query?name=${dnsName}&type=TXT`, {
+    const resp = await fetch(`https://1.1.1.1/dns-query?name=${encodeURIComponent(dnsName)}&type=TXT`, {
       headers: { "Accept": "application/dns-json" },
     });
     if (!resp.ok) return null;
