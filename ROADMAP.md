@@ -46,14 +46,17 @@ That changes everything about how this should be designed.
 - [ ] **Context compaction** — `openfuse compact` rolls old inbox messages into `history/YYYY-MM-DD.md` digests (log rotation for agents), keeps inode count manageable
 - [ ] **Schema versioning** — version field in `.mesh.json`, migration path for protocol changes
 
-### v0.5 — Federation (Agent DNS)
-- [ ] **Public registry** — `gs://openfuse-registry` bucket with `manifest.json` per agent (name, endpoint, pubkey, capabilities)
-- [ ] **`openfuse register`** — write signed manifest to registry, claim your name
-- [ ] **`openfuse discover`** — look up agent by name, resolve endpoint + public key
-- [ ] **`openfuse send <name> <message>`** — resolve via registry → drop signed message in remote inbox
+### v0.5 — Federation (Agent DNS) ✅ *(Mar 2026)*
+- [x] **Public registry** — CF Worker + R2 at `openfuse-registry.wzmcghee.workers.dev`
+- [x] **`openfuse register`** — write signed manifest to registry, claim your name
+- [x] **`openfuse discover`** — look up agent by name, resolve endpoint + public key, verify signature
+- [x] **`openfuse send <name> <message>`** — resolve via registry → encrypt + deliver
+- [x] **Self-hosted registries** — `OPENFUSE_REGISTRY` env var, local dir or HTTP
+- [x] **Name squatting protection** — manifest must be signed by the agent's key, updates require same key
+- [x] **Update checker** — CLI checks registry for newer versions on `status`
+- [ ] **Key revocation** — signed revocation message to invalidate a leaked key
+- [ ] **Key rotation** — publish new key signed by old key, registry accepts the transition
 - [ ] **Cross-bucket messaging** — write to another agent's S3/GCS bucket directly (IAM scoped)
-- [ ] **Self-hosted registries** — `OPENFUSE_REGISTRY` env var, private registries for private meshes
-- [ ] **Name squatting protection** — manifest must be signed by the agent's key, updates require same key
 - [ ] **Dual-mount pattern** — two agents mount same bucket via s3fs/gcsfuse, zero-config messaging
 
 ### v0.6 — OpenShell Integration
