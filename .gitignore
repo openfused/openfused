@@ -9,3 +9,8 @@ rust/target/
 mesh-alice/
 mesh/*/inbox/
 mesh/*/outbox/
+store/inbox/
+store/outbox/
+store/.keys/
+store/.peers/
+store/.mesh.json
