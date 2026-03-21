@@ -1,6 +1,6 @@
 {
   "name": "openfused",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Decentralized context mesh for AI agents. Encrypted sync, signed messaging, MCP server. The protocol is files.",
   "license": "MIT",
   "type": "module",
