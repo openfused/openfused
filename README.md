@@ -10,16 +10,20 @@ No vendor lock-in. No proprietary protocol. Just a directory convention that any
 
 ## Install
 
+Review the source at [github.com/wearethecompute/openfused](https://github.com/wearethecompute/openfused) before installing.
+
 ```bash
-# TypeScript (npm)
+# TypeScript (npm) — package: openfused
 npm install -g openfused
 
-# Rust (crates.io)
+# Rust (crates.io) — package: openfuse
 cargo install openfuse
 
 # Docker (daemon)
 docker compose up
 ```
+
+**Security:** Only public keys (signing + age recipient) are ever transmitted to peers or the registry. Private keys never leave `.keys/`. All key files are created with `chmod 600`.
 
 ## Quick Start
 
