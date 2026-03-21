@@ -228,7 +228,11 @@ async fn push_http_outbox(
             .send()
             .await
         {
-            Ok(r) if r.status().is_success() => pushed.push(fname),
+            Ok(r) if r.status().is_success() => {
+                // Move to .sent/ to prevent re-delivery
+                archive_sent(&outbox_dir, &fname)?;
+                pushed.push(fname);
+            }
             Ok(r) => anyhow::bail!("{}: HTTP {}", fname, r.status()),
             Err(e) => anyhow::bail!("{}: {}", fname, e),
         }
@@ -290,7 +294,10 @@ async fn sync_ssh(
             let src = entry.path().to_string_lossy().to_string();
             let dst = format!("{}:{}/inbox/{}", host, remote_path, fname);
             match rsync(&src, &dst).await {
-                Ok(_) => pushed.push(fname),
+                Ok(_) => {
+                    archive_sent(&outbox_dir, &fname)?;
+                    pushed.push(fname);
+                }
                 Err(e) => errors.push(format!("push {}: {}", entry.file_name().to_string_lossy(), e)),
             }
         }
@@ -307,6 +314,16 @@ async fn sync_ssh(
         pushed,
         errors,
     })
+}
+
+/// Move a delivered message from outbox/ to outbox/.sent/ to prevent re-delivery.
+fn archive_sent(outbox_dir: &Path, fname: &str) -> Result<()> {
+    let sent_dir = outbox_dir.join(".sent");
+    fs::create_dir_all(&sent_dir)?;
+    let src = outbox_dir.join(fname);
+    let dst = sent_dir.join(fname);
+    fs::rename(&src, &dst)?;
+    Ok(())
 }
 
 async fn rsync(src: &str, dst: &str) -> Result<()> {

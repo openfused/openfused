@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { execFile as execFileCb } from "node:child_process";
@@ -19,6 +19,13 @@ interface Transport {
   baseUrl?: string;
   host?: string;
   path?: string;
+}
+
+/** Move delivered message from outbox/ to outbox/.sent/ to prevent re-delivery. */
+async function archiveSent(outboxDir: string, fname: string): Promise<void> {
+  const sentDir = join(outboxDir, ".sent");
+  await mkdir(sentDir, { recursive: true });
+  await rename(join(outboxDir, fname), join(sentDir, fname));
 }
 
 function parseUrl(url: string): Transport {
@@ -137,8 +144,10 @@ async function syncHttp(
           headers: { "Content-Type": "application/json" },
           body,
         });
-        if (r.ok) pushed.push(fname);
-        else errors.push(`push ${fname}: HTTP ${r.status}`);
+        if (r.ok) {
+          await archiveSent(outboxDir, fname);
+          pushed.push(fname);
+        } else errors.push(`push ${fname}: HTTP ${r.status}`);
       } catch (e: any) {
         errors.push(`push ${fname}: ${e.message}`);
       }
@@ -190,6 +199,7 @@ async function syncSsh(
       if (!fname.includes(peer.name) && !fname.includes(peer.id)) continue;
       try {
         await execFile("rsync", ["-az", join(outboxDir, fname), `${host}:${remotePath}/inbox/${fname}`]);
+        await archiveSent(outboxDir, fname);
         pushed.push(fname);
       } catch (e: any) {
         errors.push(`push ${fname}: ${e.stderr || e.message}`);
