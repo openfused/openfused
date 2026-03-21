@@ -67,7 +67,8 @@ impl ContextStore {
     }
 
     pub async fn read_file(&self, path: &str) -> Option<Vec<u8>> {
-        let allowed_prefixes = ["shared/", "knowledge/", "CONTEXT.md", "SOUL.md"];
+        // SOUL.md is private — only visible if copied to shared/
+        let allowed_prefixes = ["shared/", "knowledge/", "CONTEXT.md"];
         if !allowed_prefixes.iter().any(|p| path.starts_with(p)) {
             tracing::warn!("Blocked read of restricted path: {}", path);
             return None;
@@ -85,7 +86,8 @@ impl ContextStore {
     pub async fn list_root(&self) -> Vec<FileEntry> {
         let mut entries = Vec::new();
 
-        for name in &["CONTEXT.md", "SOUL.md", "shared", "knowledge"] {
+        // SOUL.md not listed — private unless agent copies it to shared/
+        for name in &["CONTEXT.md", "shared", "knowledge"] {
             let path = self.root.join(name);
             if let Ok(meta) = fs::metadata(&path).await {
                 entries.push(FileEntry {
