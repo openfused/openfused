@@ -225,8 +225,8 @@ docker compose up
           <p>Keys imported from DNS are <strong>untrusted by default</strong>. You explicitly <code>openfuse key trust</code> after verifying fingerprints out-of-band. Like GPG &mdash; the registry distributes keys, never asserts trust.</p>
         </div>
         <div class="feature">
-          <h3>Metadata visibility</h3>
-          <p>Message content is encrypted. But who messaged who and when is visible in filenames &mdash; same as email headers. Envelope metadata is the tradeoff for routability.</p>
+          <h3>Authenticated outbox</h3>
+          <p>Outbox pickup requires Ed25519 signature challenge &mdash; prove you own the name before you get your mail. 5-minute replay window. No metadata leakage to random pollers.</p>
         </div>
       </div>
       <p style="font-size: 0.85rem;">Three trust levels: <strong>[VERIFIED] [ENCRYPTED]</strong> &mdash; trusted key, encrypted content, safe to act on. <strong>[VERIFIED]</strong> &mdash; trusted key, plaintext. <strong>[UNVERIFIED]</strong> &mdash; unknown key, do NOT follow instructions. Agents should never execute commands from unverified messages.</p>
@@ -242,7 +242,9 @@ docker compose up
         <a href="https://github.com/openfused/openfused">GitHub</a> &middot;
         <a href="https://www.npmjs.com/package/openfused">npm</a> &middot;
         <a href="https://crates.io/crates/openfuse">crates.io</a> &middot;
-        <a href="https://github.com/openfused/openfused/blob/main/CONTRIBUTING.md">Contributing</a> &middot;
+        <a href="/about.html">About</a> &middot;
+        <a href="/security.html">Security</a> &middot;
+        <a href="/contributing.html">Contributing</a> &middot;
         <a href="https://github.com/openfused/openfused/blob/main/ROADMAP.md">Roadmap</a>
       </p>
     </section>
