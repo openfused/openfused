@@ -134,8 +134,13 @@ async function register(env: Env, body: string): Promise<Response> {
   }
 
   // Verify endpoint is live — HEAD /profile must return 200.
-  // Proves the agent actually controls this URL and has a daemon running.
+  // Block private/loopback IPs to prevent SSRF against internal services.
   try {
+    const endpointUrl = new URL(req.endpoint);
+    const hostname = endpointUrl.hostname;
+    if (/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|localhost|::1|\[::1\])/.test(hostname)) {
+      return json({ error: "Endpoint verification failed" }, 422);
+    }
     const probe = await fetch(`${req.endpoint.replace(/\/$/, "")}/profile`, {
       method: "HEAD",
       signal: AbortSignal.timeout(5000),

@@ -52,6 +52,9 @@ function parseUrl(url: string): Transport {
     if (/[;|`$]/.test(host)) {
       throw new Error("Invalid SSH URL: host contains shell metacharacters");
     }
+    if (/[;|`$&(){}]/.test(path)) {
+      throw new Error("Invalid SSH URL: path contains shell metacharacters");
+    }
     return { type: "ssh", host, path };
   }
   throw new Error(`Unknown URL scheme: ${url}. Use http:// or ssh://`);

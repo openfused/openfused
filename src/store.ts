@@ -264,9 +264,14 @@ export class ContextStore {
       const signed = deserializeSignedMessage(raw);
       if (signed) {
         const sigValid = verifyMessage(signed);
-        // autoTrust (workspace mode): valid signature = verified, no explicit trust needed
+        // autoTrust (workspace mode): any key in keyring is trusted, but key must still
+        // be present — prevents random internet keys from appearing verified in a workspace
+        // that's accidentally exposed to the network.
+        const inKeyring = config.keyring.some(
+          (k) => k.signingKey.trim() === signed.publicKey.trim()
+        );
         const trusted = config.autoTrust
-          ? true
+          ? inKeyring
           : config.keyring.some(
               (k) => k.trusted && k.signingKey.trim() === signed.publicKey.trim()
             );

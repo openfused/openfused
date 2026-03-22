@@ -40,6 +40,9 @@ fn parse_url(url: &str) -> Result<Transport> {
         if host.contains(';') || host.contains('|') || host.contains('`') || host.contains('$') {
             anyhow::bail!("Invalid SSH URL: host contains shell metacharacters");
         }
+        if path.contains(';') || path.contains('|') || path.contains('`') || path.contains('$') || path.contains('&') {
+            anyhow::bail!("Invalid SSH URL: path contains shell metacharacters");
+        }
         Ok(Transport::Ssh {
             host: host.to_string(),
             path: path.to_string(),

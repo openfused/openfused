@@ -294,9 +294,12 @@ impl ContextStore {
                     "unknown".to_string()
                 };
                 let time = parts[0].to_string();
+                // Use the same XML escaping as signed messages to prevent
+                // prompt injection via crafted unsigned message content.
+                let esc = |s: &str| s.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;");
                 let wrapped = format!(
                     "<external_message from=\"{}\" verified=\"false\" time=\"{}\" status=\"UNVERIFIED\">\n{}\n</external_message>",
-                    from, time, raw
+                    esc(&from), esc(&time), esc(&raw)
                 );
                 messages.push(InboxMessage {
                     file: fname,

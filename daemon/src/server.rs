@@ -130,7 +130,9 @@ async fn receive_inbox(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    tracing::info!("Received verified message from: {}", from);
+    // Note: signature is self-consistent (signed by the embedded key), NOT identity-verified.
+    // Trust verification happens at read-time via the keyring, not at delivery-time.
+    tracing::info!("Received signed message from: {}", from);
     Ok(StatusCode::CREATED)
 }
 
