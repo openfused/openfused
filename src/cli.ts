@@ -11,6 +11,19 @@ import { resolve, join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { parseValiditySections, buildValidityReport } from "./validity.js";
 
+// Enable proxy support: Node.js built-in fetch (undici) doesn't respect
+// HTTP_PROXY/HTTPS_PROXY env vars by default. Setting a global EnvHttpProxyAgent
+// makes all fetch() calls proxy-aware, which is essential for corporate networks,
+// containers, and tunneled environments.
+if (process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY) {
+  try {
+    const { EnvHttpProxyAgent, setGlobalDispatcher } = await import("undici");
+    setGlobalDispatcher(new EnvHttpProxyAgent());
+  } catch {
+    // undici not available — fetch will work without proxy
+  }
+}
+
 const VERSION = "0.3.13";
 
 const program = new Command();
