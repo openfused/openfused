@@ -184,7 +184,7 @@ Pull peer context, pull their outbox for your mail, push your outbox. Two transp
 openfuse peer add ssh://alice.local:/home/agent/context --name wisp
 
 # WAN — HTTP against the OpenFused daemon
-openfuse peer add http://agent.example.com:2053 --name wisp
+openfuse peer add https://wisp.openfused.dev --name wisp
 
 # Sync all peers
 openfuse sync
