@@ -8,6 +8,7 @@ pub struct MeshConfig {
     pub name: String,
     pub created: String,
     #[serde(default)]
+    #[serde(rename = "publicKey")]
     pub public_key: Option<String>,
     #[serde(default, rename = "encryptionKey")]
     pub encryption_key: Option<String>,
