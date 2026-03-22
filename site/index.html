@@ -14,30 +14,31 @@
     :root { --bg: #0a0a0a; --fg: #e0e0e0; --accent: #4fc3f7; --dim: #999; --border: #222; --code-bg: #111; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { background-color: #0a0a0a; }
-    body { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace; background: var(--bg); color: var(--fg); line-height: 1.6; -webkit-text-fill-color: var(--fg); }
-    a { color: var(--accent); text-decoration: none; }
+    body { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace; background: var(--bg) !important; color: var(--fg) !important; line-height: 1.6; }
+    a { color: var(--accent) !important; text-decoration: none; }
     a:hover { text-decoration: underline; }
 
     .container { max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; }
 
     header { padding: 4rem 0 2rem; text-align: center; }
     header h1 { font-size: 2.5rem; letter-spacing: -1px; }
-    header h1 span { color: var(--accent); }
-    header .tagline { color: var(--dim); margin-top: 0.5rem; font-size: 1.1rem; }
-    header .sub { color: var(--dim); margin-top: 0.8rem; font-size: 0.9rem; font-style: italic; }
+    header h1 { color: var(--fg) !important; }
+    header h1 span { color: var(--accent) !important; }
+    header .tagline { color: var(--dim) !important; margin-top: 0.5rem; font-size: 1.1rem; }
+    header .sub { color: var(--dim) !important; margin-top: 0.8rem; font-size: 0.9rem; font-style: italic; }
 
     .install { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin: 2rem 0; }
-    .install code { color: var(--accent); }
-    .install .comment { color: var(--dim); }
+    .install code { color: var(--accent) !important; }
+    .install .comment { color: var(--dim) !important; }
 
     section { margin: 3rem 0; }
-    section h2 { font-size: 1.3rem; margin-bottom: 1rem; color: var(--accent); }
-    section p { color: var(--dim); margin-bottom: 1rem; }
+    section h2 { font-size: 1.3rem; margin-bottom: 1rem; color: var(--accent) !important; }
+    section p { color: var(--dim) !important; margin-bottom: 1rem; }
 
     .features { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 2rem 0; }
     .feature { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; }
-    .feature h3 { font-size: 0.95rem; margin-bottom: 0.5rem; }
-    .feature p { font-size: 0.85rem; color: var(--dim); margin: 0; }
+    .feature h3 { font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--fg) !important; }
+    .feature p { font-size: 0.85rem; color: var(--dim) !important; margin: 0; }
     @media (max-width: 600px) { .features { grid-template-columns: 1fr; } }
 
     .demo { background: var(--code-bg); border: 2px solid var(--accent); border-radius: 8px; padding: 1.5rem; margin: 2rem 0; }
@@ -53,13 +54,13 @@
     .discover button:hover { opacity: 0.85; }
     #discover-result { margin-top: 1rem; font-size: 0.85rem; white-space: pre-wrap; color: var(--dim); }
 
-    .store { font-size: 0.85rem; color: var(--dim); }
-    .store span { color: var(--fg); }
+    .store { font-size: 0.85rem; color: var(--dim) !important; }
+    .store span { color: var(--fg) !important; }
 
-    .philosophy { border-left: 3px solid var(--accent); padding-left: 1.2rem; margin: 2rem 0; color: #888; font-style: italic; font-size: 0.9rem; }
+    .philosophy { border-left: 3px solid var(--accent); padding-left: 1.2rem; margin: 2rem 0; color: #888 !important; font-style: italic; font-size: 0.9rem; }
 
-    footer { border-top: 1px solid var(--border); margin-top: 4rem; padding: 2rem 0; text-align: center; color: var(--dim); font-size: 0.8rem; }
-    footer a { color: var(--dim); }
+    footer { border-top: 1px solid var(--border); margin-top: 4rem; padding: 2rem 0; text-align: center; color: var(--dim) !important; font-size: 0.8rem; }
+    footer a { color: var(--dim) !important; }
   </style>
 </head>
 <body>
