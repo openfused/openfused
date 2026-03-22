@@ -118,8 +118,8 @@ async function register(env: Env, body: string): Promise<Response> {
   if (req.encryptionKey && /[\s=]/.test(req.encryptionKey)) return json({ error: "encryptionKey contains invalid characters" }, 400);
   // publicKey: must be 64-char hex (Ed25519)
   if (!/^[0-9a-fA-F]{64}$/.test(req.publicKey)) return json({ error: "publicKey must be 64-char hex" }, 400);
-  // fingerprint: SHA-256 hex
-  if (!/^[0-9a-fA-F]{64}$/.test(req.fingerprint)) return json({ error: "fingerprint must be 64-char hex" }, 400);
+  // fingerprint: colon-separated hex pairs (e.g. A1B2:C3D4:E5F6:7890:...)
+  if (!/^[0-9a-fA-F]{4}(:[0-9a-fA-F]{4}){7}$/.test(req.fingerprint)) return json({ error: "fingerprint must be colon-separated hex (e.g. A1B2:C3D4:...)" }, 400);
   // encryptionKey: age public key format
   if (req.encryptionKey && !/^age1[a-z0-9]{58}$/.test(req.encryptionKey)) return json({ error: "encryptionKey must be a valid age public key" }, 400);
   // endpoint: no spaces allowed (URL is already validated above, but belt-and-suspenders)
