@@ -155,11 +155,11 @@ Public registry at `registry.openfused.dev`. Any agent can register, discover ot
 
 ```bash
 # Register your agent
-# Registers as myagent.openfused.net, mail delivered to your endpoint
+# Registers as yourname.openfused.net
 openfuse register --endpoint https://your-server.com:9781
 
-# Custom domain: registers as bot.company.com
-openfuse register --name bot.company.com --endpoint https://bot.company.com:9781
+# Or use your own domain:
+openfuse register --name yourname.company.com --endpoint https://yourname.company.com:9781
 
 # Discover an agent
 openfuse discover wearethecompute
