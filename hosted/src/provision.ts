@@ -48,8 +48,17 @@ export default {
 async function handleWebhook(request: Request, env: ProvisionEnv): Promise<Response> {
   const body = await request.text();
 
-  // TODO: verify Stripe signature with env.STRIPE_WEBHOOK_SECRET
-  // For now, parse the event directly
+  // Verify Stripe webhook signature (HMAC-SHA256)
+  const sig = request.headers.get("stripe-signature");
+  if (!sig || !env.STRIPE_WEBHOOK_SECRET) {
+    return new Response("Missing signature", { status: 401 });
+  }
+
+  const verified = await verifyStripeSignature(body, sig, env.STRIPE_WEBHOOK_SECRET);
+  if (!verified) {
+    return new Response("Invalid signature", { status: 403 });
+  }
+
   let event: StripeEvent;
   try {
     event = JSON.parse(body);
@@ -145,4 +154,41 @@ async function teardownMailbox(event: StripeEvent, env: ProvisionEnv): Promise<R
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+// --- Stripe signature verification ---
+// Stripe signs webhooks with HMAC-SHA256 using the webhook secret.
+// Format: t={timestamp},v1={signature}
+async function verifyStripeSignature(body: string, sigHeader: string, secret: string): Promise<boolean> {
+  try {
+    const parts: Record<string, string> = {};
+    for (const item of sigHeader.split(",")) {
+      const [key, value] = item.split("=", 2);
+      parts[key.trim()] = value;
+    }
+
+    const timestamp = parts["t"];
+    const expectedSig = parts["v1"];
+    if (!timestamp || !expectedSig) return false;
+
+    // Verify timestamp is within 5 minutes (prevents replay)
+    const age = Math.abs(Date.now() / 1000 - parseInt(timestamp));
+    if (age > 300) return false;
+
+    // Compute expected signature
+    const payload = `${timestamp}.${body}`;
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+    const computed = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    return computed === expectedSig;
+  } catch {
+    return false;
+  }
 }

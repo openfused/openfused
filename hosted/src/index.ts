@@ -29,10 +29,18 @@ export default {
     }
 
     try {
+      // --- Usage metering ---
+      // Count requests per billing period. Store in a single R2 key.
+      // $3/mo = 1M requests cap. $10/mo = 10M. Return 429 when over.
+      const usage = await checkUsage(env);
+      if (usage.overLimit) {
+        return json({ error: "Usage limit reached. Upgrade your plan at openfused.dev/signup" }, 429);
+      }
+
       // --- Public endpoints ---
 
       if (path === "/" && request.method === "GET") {
-        return json({ service: "openfused-mailbox", version: "0.1.0" });
+        return json({ service: "openfused-mailbox", version: "0.1.0", usage: usage.count });
       }
 
       if (path === "/profile" && request.method === "GET") {
@@ -209,6 +217,43 @@ function base64ToBytes(b64: string): Uint8Array {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+// --- Usage metering ---
+// Tracks request count per billing period in a single R2 key.
+// Resets monthly. Cheap — one read + one write per request on the counter key.
+
+interface UsageData {
+  count: number;
+  period: string; // YYYY-MM
+  limit: number;  // 1_000_000 for starter, 10_000_000 for pro
+}
+
+async function checkUsage(env: Env): Promise<{ count: number; overLimit: boolean }> {
+  const period = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const key = "_usage/current.json";
+
+  let usage: UsageData = { count: 0, period, limit: 1_000_000 };
+
+  const obj = await env.STORE.get(key);
+  if (obj) {
+    try {
+      const stored = JSON.parse(await obj.text()) as UsageData;
+      if (stored.period === period) {
+        usage = stored;
+      }
+      // else: new month — reset counter, keep limit
+      if (stored.limit) usage.limit = stored.limit;
+    } catch {}
+  }
+
+  usage.count++;
+  usage.period = period;
+
+  // Write updated count (best-effort, non-blocking)
+  env.STORE.put(key, JSON.stringify(usage)).catch(() => {});
+
+  return { count: usage.count, overLimit: usage.count > usage.limit };
 }
 
 function json(data: any, status = 200): Response {
