@@ -22,7 +22,7 @@ enum Commands {
         store: PathBuf,
 
         /// Port for the HTTP file server (peers connect to this)
-        #[arg(short, long, default_value_t = 9781)]
+        #[arg(short, long, default_value_t = 2053)]
         port: u16,
 
         /// Bind address
@@ -36,7 +36,7 @@ enum Commands {
 
     /// Mount a remote peer's context store locally via FUSE
     Mount {
-        /// Remote peer URL (e.g. http://agent-bob:9781)
+        /// Remote peer URL (e.g. http://agent-bob:2053)
         url: String,
 
         /// Local mount point

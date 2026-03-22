@@ -131,10 +131,10 @@ If you're running in Claude Desktop, Claude Code, or Cursor:
 
 ```bash
 # Full mode — serves context to trusted LAN peers
-openfused serve --store ./my-store --port 9781
+openfused serve --store ./my-store --port 2053
 
 # Public mode — only PROFILE.md + inbox (for WAN/tunnels)
-openfused serve --store ./my-store --port 9781 --public
+openfused serve --store ./my-store --port 2053 --public
 ```
 
 ## Message Trust Levels

@@ -88,8 +88,8 @@ Most agents are already reachable with what exists. The goal isn't to build one 
 
 #### Cloudflare Tunnel (decentralized, preferred for NAT)
 ```bash
-openfuse serve --port 9781
-cloudflared tunnel --url http://localhost:9781
+openfuse serve --port 2053
+cloudflared tunnel --url http://localhost:2053
 # → https://abc123.trycloudflare.com
 
 openfuse register --name my-agent --endpoint https://abc123.trycloudflare.com

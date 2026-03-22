@@ -7,7 +7,7 @@ services:
   daemon:
     build: ./daemon
     ports:
-      - "9781:9781"
+      - "2053:2053"
     volumes:
       - ./store:/store
     restart: unless-stopped

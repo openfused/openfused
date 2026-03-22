@@ -231,8 +231,8 @@ program
       })();
 
       const args = cmd === "autossh"
-        ? ["-M", "0", "-N", "-R", `${tunnelPort}:localhost:9781`, tunnelHost, "-o", "ServerAliveInterval=15", "-o", "ExitOnForwardFailure=yes"]
-        : ["-N", "-R", `${tunnelPort}:localhost:9781`, tunnelHost, "-o", "ServerAliveInterval=15", "-o", "ExitOnForwardFailure=yes"];
+        ? ["-M", "0", "-N", "-R", `${tunnelPort}:localhost:2053`, tunnelHost, "-o", "ServerAliveInterval=15", "-o", "ExitOnForwardFailure=yes"]
+        : ["-N", "-R", `${tunnelPort}:localhost:2053`, tunnelHost, "-o", "ServerAliveInterval=15", "-o", "ExitOnForwardFailure=yes"];
 
       const tunnel = spawn(cmd, args, { stdio: "ignore" });
       tunnel.on("error", (e) => console.error(`[tunnel] ${cmd} failed: ${e.message}`));
@@ -241,14 +241,14 @@ program
       });
       process.on("exit", () => tunnel.kill());
 
-      console.log(`Tunnel: ${cmd} -R ${tunnelPort}:localhost:9781 ${tunnelHost}`);
-      console.log(`Your store is reachable at ssh://${tunnelHost}:${tunnelPort} (via daemon on :9781)`);
+      console.log(`Tunnel: ${cmd} -R ${tunnelPort}:localhost:2053 ${tunnelHost}`);
+      console.log(`Your store is reachable at ssh://${tunnelHost}:${tunnelPort} (via daemon on :2053)`);
     }
 
     // Cloudflared quick tunnel (optional) — gives you a public *.trycloudflare.com URL
     if (opts.cloudflared) {
       const { spawn } = await import("node:child_process");
-      const cf = spawn("cloudflared", ["tunnel", "--url", "http://localhost:9781"], {
+      const cf = spawn("cloudflared", ["tunnel", "--url", "http://localhost:2053"], {
         stdio: ["ignore", "pipe", "pipe"],
       });
       cf.on("error", (e) => console.error(`[cloudflared] failed: ${e.message}. Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/`));

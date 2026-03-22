@@ -156,10 +156,10 @@ Public registry at `registry.openfused.dev`. Any agent can register, discover ot
 ```bash
 # Register your agent
 # Registers as yourname.openfused.net
-openfuse register --endpoint https://your-server.com:9781
+openfuse register --endpoint https://your-server.com:2053
 
 # Or use your own domain:
-openfuse register --name yourname.company.com --endpoint https://yourname.company.com:9781
+openfuse register --name yourname.company.com --endpoint https://yourname.company.com:2053
 
 # Discover an agent
 openfuse discover wearethecompute
@@ -184,7 +184,7 @@ Pull peer context, pull their outbox for your mail, push your outbox. Two transp
 openfuse peer add ssh://alice.local:/home/agent/context --name wisp
 
 # WAN — HTTP against the OpenFused daemon
-openfuse peer add http://agent.example.com:9781 --name wisp
+openfuse peer add http://agent.example.com:2053 --name wisp
 
 # Sync all peers
 openfuse sync
@@ -248,10 +248,10 @@ The daemon has two modes:
 
 ```bash
 # Full mode — serves everything to trusted LAN peers
-openfused serve --store ./my-context --port 9781
+openfused serve --store ./my-context --port 2053
 
 # Public mode — PROFILE.md + inbox + outbox pickup (for WAN/tunnels)
-openfused serve --store ./my-context --port 9781 --public
+openfused serve --store ./my-context --port 2053 --public
 ```
 
 Public mode endpoints:
