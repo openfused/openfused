@@ -1,0 +1,10 @@
+name = "openfused-site"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "openfused.dev", custom_domain = true }
+]
+
+[assets]
+directory = "./"
