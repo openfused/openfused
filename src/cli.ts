@@ -141,22 +141,33 @@ inbox
   });
 
 inbox
-  .command("archive <file>")
-  .description("Archive a specific inbox message to inbox/.read/")
+  .command("archive [file]")
+  .description("Archive inbox message(s) to inbox/.read/ — specific file or --all")
   .option("-d, --dir <path>", "Context store directory", ".")
+  .option("--all", "Archive all inbox messages")
   .action(async (file, opts) => {
     const store = new ContextStore(resolve(opts.dir));
-    const { mkdir, rename } = await import("node:fs/promises");
+    const { readdir: rd, mkdir, rename } = await import("node:fs/promises");
     const { join, basename } = await import("node:path");
-    const safe = basename(file);
     const inboxDir = join(store.root, "inbox");
     const readDir = join(inboxDir, ".read");
     await mkdir(readDir, { recursive: true });
-    try {
-      await rename(join(inboxDir, safe), join(readDir, safe));
-      console.log(`Archived: ${safe}`);
-    } catch {
-      console.error(`Not found in inbox: ${safe}`);
+
+    if (opts.all) {
+      const files = (await rd(inboxDir)).filter(f => f.endsWith(".json") || f.endsWith(".md"));
+      for (const f of files) await rename(join(inboxDir, f), join(readDir, f));
+      console.log(`Archived ${files.length} messages.`);
+    } else if (file) {
+      const safe = basename(file);
+      try {
+        await rename(join(inboxDir, safe), join(readDir, safe));
+        console.log(`Archived: ${safe}`);
+      } catch {
+        console.error(`Not found in inbox: ${safe}`);
+        process.exit(1);
+      }
+    } else {
+      console.error("Specify a filename or use --all");
       process.exit(1);
     }
   });
