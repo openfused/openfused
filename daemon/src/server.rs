@@ -52,7 +52,7 @@ pub async fn serve(store_path: PathBuf, bind: &str, port: u16, public: bool) {
 }
 
 async fn root() -> &'static str {
-    "openfused v0.3.2 — agent messaging daemon"
+    "openfused v0.3.12 — agent messaging daemon"
 }
 
 async fn get_config(
