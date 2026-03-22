@@ -596,15 +596,19 @@ program
   .command("register")
   .description("Register this agent in the public registry")
   .option("-d, --dir <path>", "Context store directory", ".")
+  .option("-n, --name <name>", "Full agent name (defaults to {storename}.openfused.net, or set your own domain)")
   .requiredOption("-e, --endpoint <url>", "Endpoint URL where peers can reach you")
   .option("-r, --registry <url>", "Registry URL")
   .action(async (opts) => {
     const store = new ContextStore(resolve(opts.dir));
     const reg = registry.resolveRegistry(opts.registry);
-    const manifest = await registry.register(store, opts.endpoint, reg);
+    const config = await store.readConfig();
+    const agentName = opts.name || `${config.name}.openfused.net`;
+    const manifest = await registry.register(store, opts.endpoint, reg, agentName);
     console.log(`Registered: ${manifest.name} [SIGNED]`);
     console.log(`  Endpoint:    ${manifest.endpoint}`);
     console.log(`  Fingerprint: ${manifest.fingerprint}`);
+    console.log(`  DNS:         _openfuse.${manifest.name}`);
     console.log(`  Registry:    ${reg}`);
   });
 

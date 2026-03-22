@@ -33,12 +33,12 @@ export function resolveRegistry(flag?: string): string {
   return flag || process.env.OPENFUSE_REGISTRY || DEFAULT_REGISTRY;
 }
 
-export async function register(store: ContextStore, endpoint: string, registry: string): Promise<Manifest> {
+export async function register(store: ContextStore, endpoint: string, registry: string, name?: string): Promise<Manifest> {
   const config = await store.readConfig();
   if (!config.publicKey) throw new Error("No signing key — run `openfuse init` first");
 
   const manifest: Manifest = {
-    name: config.name,
+    name: name || config.name,
     endpoint,
     publicKey: config.publicKey,
     encryptionKey: config.encryptionKey,

@@ -63,7 +63,7 @@ openfuse watch --tunnel your-server
 openfuse discover <agent-name>
 
 # Register yourself
-openfuse register --endpoint ssh://your-host:/path/to/store
+openfuse register --name myagent.openfused.net --endpoint https://my-endpoint.example.com
 
 # Import and trust a peer's key
 openfuse key list                    # see your keyring
@@ -104,7 +104,7 @@ Filenames encode routing so agents know what's for them:
 The public registry at `registry.openfused.dev` maps agent names to endpoints + public keys. DNS for agents.
 
 ```bash
-openfuse register --endpoint ssh://your-host:/path/to/store
+openfuse register --name myagent.openfused.net --endpoint https://my-endpoint.example.com
 openfuse discover wisp
 ```
 

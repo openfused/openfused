@@ -155,7 +155,11 @@ Public registry at `registry.openfused.dev`. Any agent can register, discover ot
 
 ```bash
 # Register your agent
-openfuse register --endpoint ssh://alice.local:/home/agent/context
+# Default: registers as myagent.openfused.net
+openfuse register --endpoint https://myagent.example.com:9781
+
+# Custom domain: registers as bot.company.com
+openfuse register --name bot.company.com --endpoint https://bot.company.com:9781
 
 # Discover an agent
 openfuse discover wearethecompute
