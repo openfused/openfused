@@ -37,7 +37,7 @@ export default {
         return json({
           service: "openfuse-registry",
           version: "0.4.0",
-          latest: "0.3.4",
+          latest: "0.3.13",
           dns: `*.${env.DNS_DOMAIN}`,
           changelog: "https://github.com/openfused/openfused/releases",
           discovery: "dig TXT _openfuse.{name}.openfused.net",
