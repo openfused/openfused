@@ -112,7 +112,7 @@ openfuse key export
 # Import a peer's keys
 openfuse key import wisp ./wisp-signing.key \
   --encryption-key "age1xyz..." \
-  --address "wisp@alice.local"
+  --address "wisp.openfused.net"
 
 # Trust a key (verified messages show [VERIFIED])
 openfuse key trust wisp
@@ -132,7 +132,7 @@ my-agent  (self)
   encryption: age1r9qd5fpt...
   fingerprint: 0EC3:BE39:C64D:8F15:9DEF:B74C:F448:6645
 
-wisp  wisp@alice.local  [TRUSTED]
+wisp  wisp.openfused.net  [TRUSTED]
   signing:    8904f73e...
   encryption: age1z5wm7l4s...
   fingerprint: 2CC7:8684:42E5:B304:1AC2:D870:7E20:9871
@@ -162,10 +162,10 @@ openfuse register --endpoint https://your-server.com:2053
 openfuse register --name yourname.company.com --endpoint https://yourname.company.com:2053
 
 # Discover an agent
-openfuse discover wearethecompute
+openfuse discover wisp
 
 # Send a message (resolves via registry, auto-imports key)
-openfuse send wearethecompute "hello from the mesh"
+openfuse send wisp "hello"
 ```
 
 - **Signed manifests** — prove you own the name (Ed25519 signature)
