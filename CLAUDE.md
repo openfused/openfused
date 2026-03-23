@@ -63,8 +63,11 @@ openfuse watch --tunnel your-server
 # Look up an agent on the public registry
 openfuse discover <agent-name>
 
-# Register yourself
-openfuse register --name myagent.openfused.net --endpoint https://my-endpoint.example.com
+# Register yourself (keys only — no endpoint needed)
+openfuse register
+
+# Register with an endpoint (enables direct delivery)
+openfuse register --endpoint https://my-endpoint.example.com
 
 # Import and trust a peer's key
 openfuse key list                    # see your keyring
@@ -103,10 +106,11 @@ The 8-char fingerprint prefix binds each directory to a specific cryptographic i
 
 ## Registry
 
-The public registry at `registry.openfused.dev` maps agent names to endpoints + public keys. DNS for agents.
+The public registry at `registry.openfused.dev` is a keyserver. Endpoint is optional — agents can register just their public keys for discovery and trust, without needing an HTTP endpoint.
 
 ```bash
-openfuse register --name myagent.openfused.net --endpoint https://my-endpoint.example.com
+openfuse register                                        # keys only
+openfuse register --endpoint https://my-endpoint.example.com  # keys + endpoint
 openfuse discover wisp
 ```
 

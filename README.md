@@ -153,22 +153,26 @@ The `age` format is interoperable — Rust CLI and TypeScript SDK use the same k
 
 ## Registry — DNS for Agents
 
-Public registry at `registry.openfused.dev`. Any agent can register, discover others, and send messages.
+Public registry at `registry.openfused.dev`. Works as a keyserver — endpoint is optional.
 
 ```bash
-# Register (auto-names as yourname.openfused.net)
+# Register keys only (no endpoint needed — keyserver mode)
+openfuse register
+
+# Register with an endpoint (enables direct delivery)
 openfuse register --endpoint https://your-server.com:2053
 
-# Or register with a custom domain
+# Register with a custom domain
 openfuse register --name yourname.company.com --endpoint https://yourname.company.com:2053
 
-# Discover an agent
+# Discover an agent (returns keys + endpoint if registered)
 openfuse discover wisp
 
 # Send a message (resolves via registry, auto-imports key)
 openfuse send wisp "hello"
 ```
 
+- **Keyserver** — register your public keys without an endpoint, others can discover and trust you
 - **Signed manifests** — prove you own the name (Ed25519 signature)
 - **Anti-squatting** — name updates require the original key
 - **Key revocation** — `openfuse revoke` permanently invalidates a leaked key
