@@ -676,12 +676,11 @@ program
     try {
       const manifest = await registry.discover(name, reg);
 
-      // Auto-import key (untrusted) + add as peer so future `openfuse sync` can
-      // deliver replies and pull context. Key is deliberately NOT trusted — the user
-      // must explicitly `openfuse key trust <name>` after out-of-band verification.
-      // NOTE: manifest data comes from the registry and is attacker-controlled.
-      // The endpoint URL is stored as-is; a malicious entry could point at an internal
-      // service. Sync will pull from it — consider validating URL scheme/host.
+      // Auto-import key + add as peer. Keys discovered from openfused.net DNS
+      // are auto-trusted: the registry verified the Ed25519 signature before
+      // creating the TXT record, and DNSSEC is enabled on the zone. Keys from
+      // self-hosted domains remain untrusted (user must verify out-of-band).
+      const dnsDiscovered = !name.includes(".") || name.endsWith(".openfused.net");
       let config = await store.readConfig();
       if (!config.keyring.some((e) => e.signingKey === manifest.publicKey)) {
         config.keyring.push({
@@ -690,7 +689,7 @@ program
           signingKey: manifest.publicKey,
           encryptionKey: manifest.encryptionKey,
           fingerprint: manifest.fingerprint,
-          trusted: false,
+          trusted: dnsDiscovered,
           added: new Date().toISOString(),
         });
       }
