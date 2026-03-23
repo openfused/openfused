@@ -291,17 +291,16 @@ export class ContextStore {
       const signed = deserializeSignedMessage(raw);
       if (signed) {
         const sigValid = verifyMessage(signed);
-        // autoTrust (workspace mode): any key in keyring is trusted, but key must still
-        // be present — prevents random internet keys from appearing verified in a workspace
-        // that's accidentally exposed to the network.
-        const inKeyring = config.keyring.some(
-          (k) => k.signingKey.trim() === signed.publicKey.trim()
-        );
+        // Identity binding: verify BOTH that the key is trusted AND that the claimed
+        // sender name matches the name we associated with that key in our keyring.
+        // Without this, a trusted agent could forge the "from" field and impersonate
+        // someone else while still showing [VERIFIED].
+        const keyMatchesName = (k: typeof config.keyring[0]) =>
+          k.signingKey.trim() === signed.publicKey.trim() &&
+          (k.name === signed.from || k.address.startsWith(`${signed.from}@`));
         const trusted = config.autoTrust
-          ? inKeyring
-          : config.keyring.some(
-              (k) => k.trusted && k.signingKey.trim() === signed.publicKey.trim()
-            );
+          ? config.keyring.some(keyMatchesName)
+          : config.keyring.some((k) => k.trusted && keyMatchesName(k));
         const verified = sigValid && trusted;
 
         let content: string;

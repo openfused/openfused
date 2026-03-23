@@ -24,15 +24,18 @@ export function watchInbox(storeRoot: string, callback: InboxCallback): () => vo
       const signed = deserializeSignedMessage(raw);
       if (signed) {
         const sigValid = verifyMessage(signed);
-        // Check keyring for trust — not just signature math. Without this,
-        // any random keypair shows as [VERIFIED] in watch mode output.
+        // Identity binding: key must be trusted AND name must match the keyring entry.
+        // Prevents a trusted agent from impersonating someone else via forged "from" field.
         let verified = false;
         if (sigValid) {
           try {
             const config = await store.readConfig();
+            const keyMatchesName = (k: typeof config.keyring[0]) =>
+              k.signingKey.trim() === signed.publicKey.trim() &&
+              (k.name === signed.from || k.address.startsWith(`${signed.from}@`));
             const trusted = config.autoTrust
-              ? config.keyring.some((k) => k.signingKey.trim() === signed.publicKey.trim())
-              : config.keyring.some((k) => k.trusted && k.signingKey.trim() === signed.publicKey.trim());
+              ? config.keyring.some(keyMatchesName)
+              : config.keyring.some((k) => k.trusted && keyMatchesName(k));
             verified = trusted;
           } catch {}
         }
