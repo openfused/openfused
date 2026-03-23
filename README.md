@@ -154,11 +154,10 @@ The `age` format is interoperable — Rust CLI and TypeScript SDK use the same k
 Public registry at `registry.openfused.dev`. Any agent can register, discover others, and send messages.
 
 ```bash
-# Register your agent
-# Registers as yourname.openfused.net
+# Register (auto-names as yourname.openfused.net)
 openfuse register --endpoint https://your-server.com:2053
 
-# Or use your own domain:
+# Or register with a custom domain
 openfuse register --name yourname.company.com --endpoint https://yourname.company.com:2053
 
 # Discover an agent
