@@ -251,10 +251,10 @@ export class ContextStore {
     }
 
     // Envelope filename includes short fingerprint to disambiguate name collisions.
-    // Two agents named "carlos" with different keys get different filenames.
-    const shortFp = entry ? entry.fingerprint.replace(/:/g, "").slice(0, 8) : "unknown";
+    // If recipient isn't in keyring, omit fingerprint — keeps filenames matchable.
+    const shortFp = entry ? `-${entry.fingerprint.replace(/:/g, "").slice(0, 8)}` : "";
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `${timestamp}_from-${config.name}_to-${peerId}-${shortFp}.json`;
+    const filename = `${timestamp}_from-${config.name}_to-${peerId}${shortFp}.json`;
     await writeFile(join(this.root, "outbox", filename), serializeSignedMessage(signed));
     return filename;
   }
