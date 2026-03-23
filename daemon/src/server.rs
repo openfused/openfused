@@ -7,6 +7,7 @@ use axum::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use sha2::{Sha256, Digest};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::{CorsLayer, AllowOrigin};
@@ -158,7 +159,8 @@ async fn get_outbox(
         while let Ok(Some(entry)) = entries.next_entry().await {
             let fname = entry.file_name().to_string_lossy().to_string();
             if !fname.ends_with(".json") { continue; }
-            if !fname.contains(&format!("_to-{}.json", safe_name)) { continue; }
+            // Match both new format (_to-name-FINGERPRINT.json) and legacy (_to-name.json)
+            if !fname.contains(&format!("_to-{}-", safe_name)) && !fname.contains(&format!("_to-{}.json", safe_name)) { continue; }
             if let Ok(content) = tokio::fs::read_to_string(entry.path()).await {
                 if let Ok(mut msg) = serde_json::from_str::<serde_json::Value>(&content) {
                     // Include filename so client can ACK (DELETE /outbox/{name}/{filename})
@@ -253,10 +255,14 @@ async fn receive_inbox(
     let to = store.config().await
         .map(|c| c.name)
         .unwrap_or_else(|| "unknown".to_string());
+    // Short fingerprint from sender's public key — disambiguates name collisions
+    let sender_fp = &hex::encode(
+        sha2::Sha256::digest(public_key.as_bytes())
+    )[..8];
     let timestamp = chrono::Utc::now()
         .to_rfc3339()
         .replace([':', '.'], "-");
-    let filename = format!("{}_from-{}_to-{}.json", timestamp, from, to);
+    let filename = format!("{}_from-{}-{}_to-{}.json", timestamp, from, sender_fp, to);
 
     store
         .write_inbox(&filename, &body)

@@ -250,10 +250,11 @@ export class ContextStore {
       signed = await signMessage(this.root, config.name, message);
     }
 
-    // Envelope filename encodes routing metadata so sync can match outbox files to peers
-    // without parsing JSON. Colons/dots replaced to stay filesystem-safe across OS.
+    // Envelope filename includes short fingerprint to disambiguate name collisions.
+    // Two agents named "carlos" with different keys get different filenames.
+    const shortFp = entry ? entry.fingerprint.replace(/:/g, "").slice(0, 8) : "unknown";
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `${timestamp}_from-${config.name}_to-${peerId}.json`;
+    const filename = `${timestamp}_from-${config.name}_to-${peerId}-${shortFp}.json`;
     await writeFile(join(this.root, "outbox", filename), serializeSignedMessage(signed));
     return filename;
   }

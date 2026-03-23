@@ -987,7 +987,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openfused"
-version = "0.3.13"
+version = "0.3.16"
 dependencies = [
  "axum",
  "base64",
@@ -1002,6 +1002,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tower-http",
  "tracing",
