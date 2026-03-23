@@ -67,10 +67,13 @@ interface Transport {
 
 // Archive instead of delete: preserves audit trail and lets agents review what was sent.
 // Without this, sync would re-deliver the same message every cycle.
-async function archiveSent(outboxDir: string, fname: string): Promise<void> {
-  const sentDir = join(outboxDir, ".sent");
+// filePath can be "file.json" (flat, legacy) or "recipientDir/file.json" (new subdir layout).
+async function archiveSent(outboxRoot: string, relPath: string): Promise<void> {
+  const dir = join(outboxRoot, relPath, "..");
+  const fname = relPath.includes("/") ? relPath.split("/").pop()! : relPath;
+  const sentDir = join(dir, ".sent");
   await mkdir(sentDir, { recursive: true });
-  await rename(join(outboxDir, fname), join(sentDir, fname));
+  await rename(join(outboxRoot, relPath), join(sentDir, fname));
 }
 
 function parseUrl(url: string): Transport {
@@ -98,15 +101,18 @@ function parseUrl(url: string): Transport {
   throw new Error(`Unknown URL scheme: ${url}. Use http:// or ssh://`);
 }
 
-/** Try to deliver a single outbox message immediately. Returns true if delivered. */
+/** Try to deliver a single outbox message immediately. Returns true if delivered.
+ *  filename can be "recipientDir/msg.json" (new) or "flat.json" (legacy). */
 export async function deliverOne(store: ContextStore, peerName: string, filename: string): Promise<boolean> {
   const config = await store.readConfig();
   const peer = config.peers.find((p) => p.name === peerName || p.id === peerName);
   if (!peer) return false;
 
-  const outboxDir = join(store.root, "outbox");
-  const filePath = join(outboxDir, filename);
+  const outboxRoot = join(store.root, "outbox");
+  const filePath = join(outboxRoot, filename);
   if (!existsSync(filePath)) return false;
+
+  const baseName = filename.includes("/") ? filename.split("/").pop()! : filename;
 
   try {
     const transport = parseUrl(peer.url);
@@ -123,12 +129,12 @@ export async function deliverOne(store: ContextStore, peerName: string, filename
     } else {
       await execFile("rsync", [
         "-az", filePath,
-        `${transport.host}:${transport.path}/inbox/${filename}`,
+        `${transport.host}:${transport.path}/inbox/${baseName}`,
       ]);
     }
 
     // Delivered — archive to .sent/
-    await archiveSent(outboxDir, filename);
+    await archiveSent(outboxRoot, filename);
     return true;
   } catch {
     return false; // stays in outbox for next sync
@@ -292,25 +298,49 @@ async function syncHttp(
     }
   } catch {}
 
-  // Push outbox → peer inbox
+  // Push outbox → peer inbox (scan subdirs named {peer}-{fp}/)
   const outboxDir = join(store.root, "outbox");
   if (existsSync(outboxDir)) {
-    for (const fname of await readdir(outboxDir)) {
-      if (!fname.endsWith(".json")) continue;
-      if (!fname.includes(`_to-${peer.name}-`) && !fname.includes(`_to-${peer.name}.json`) && !fname.includes(peer.id)) continue;
-      try {
-        const body = await readFile(join(outboxDir, fname), "utf-8");
-        const r = await fetch(`${baseUrl}/inbox`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        });
-        if (r.ok) {
-          await archiveSent(outboxDir, fname);
-          pushed.push(fname);
-        } else errors.push(`push ${fname}: HTTP ${r.status}`);
-      } catch (e: any) {
-        errors.push(`push ${fname}: ${e.message}`);
+    for (const entry of await readdir(outboxDir, { withFileTypes: true })) {
+      // Match subdirs starting with peer name (new format: name-FINGERPRINT/)
+      if (entry.isDirectory() && entry.name.startsWith(`${peer.name}-`)) {
+        const subDir = join(outboxDir, entry.name);
+        for (const fname of await readdir(subDir)) {
+          if (!fname.endsWith(".json")) continue;
+          const relPath = `${entry.name}/${fname}`;
+          try {
+            const body = await readFile(join(subDir, fname), "utf-8");
+            const r = await fetch(`${baseUrl}/inbox`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body,
+            });
+            if (r.ok) {
+              await archiveSent(outboxDir, relPath);
+              pushed.push(relPath);
+            } else errors.push(`push ${relPath}: HTTP ${r.status}`);
+          } catch (e: any) {
+            errors.push(`push ${relPath}: ${e.message}`);
+          }
+        }
+      }
+      // Legacy flat files (pre-subdir format)
+      if (entry.isFile() && entry.name.endsWith(".json")) {
+        if (!entry.name.includes(`_to-${peer.name}-`) && !entry.name.includes(`_to-${peer.name}.json`)) continue;
+        try {
+          const body = await readFile(join(outboxDir, entry.name), "utf-8");
+          const r = await fetch(`${baseUrl}/inbox`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          });
+          if (r.ok) {
+            await archiveSent(outboxDir, entry.name);
+            pushed.push(entry.name);
+          } else errors.push(`push ${entry.name}: HTTP ${r.status}`);
+        } catch (e: any) {
+          errors.push(`push ${entry.name}: ${e.message}`);
+        }
       }
     }
   }
@@ -354,40 +384,74 @@ async function syncSsh(
 
   // Pull peer's outbox for messages addressed to us — peer may be behind NAT
   // and can't push to us, so we grab messages they left in their outbox for us.
+  // New layout: outbox/{name}-{fp}/*.json — pull from all dirs starting with our name.
   const config = await store.readConfig();
   const myName = config.name;
   const inboxDir = join(store.root, "inbox");
   await mkdir(inboxDir, { recursive: true });
+
+  // New subdir format: pull from outbox/{myName}-*/*.json
   try {
     await execFile("rsync", [
       "-az", "--ignore-existing",
-      "--include", `*_to-${myName}-*.json`,   // new format with fingerprint
-      "--include", `*_to-${myName}.json`,     // legacy format without fingerprint
-      "--include", `*_to-all.json`,
-      "--include", `*_${myName}.json`,        // pre-envelope legacy
+      "--include", `${myName}-*/`,            // include our subdirs
+      "--include", `${myName}-*/*.json`,      // include json files inside
       "--exclude", "*",
       `${host}:${remotePath}/outbox/`,
-      `${inboxDir}/`,
+      `${inboxDir}/`,                         // flatten into inbox
     ]);
     pulled.push("outbox→inbox");
   } catch (e: any) {
     if (!String(e.stderr || e.message).includes("No such file")) {
-      errors.push(`pull outbox: ${e.stderr || e.message}`);
+      errors.push(`pull outbox (subdir): ${e.stderr || e.message}`);
     }
   }
 
-  // Push our outbox → peer inbox
+  // Legacy flat format: outbox/*_to-{name}*.json
+  try {
+    await execFile("rsync", [
+      "-az", "--ignore-existing",
+      "--include", `*_to-${myName}-*.json`,
+      "--include", `*_to-${myName}.json`,
+      "--include", `*_to-all.json`,
+      "--exclude", "*",
+      `${host}:${remotePath}/outbox/`,
+      `${inboxDir}/`,
+    ]);
+  } catch (e: any) {
+    if (!String(e.stderr || e.message).includes("No such file")) {
+      errors.push(`pull outbox (legacy): ${e.stderr || e.message}`);
+    }
+  }
+
+  // Push our outbox → peer inbox (scan subdirs named {peer}-{fp}/)
   const outboxDir = join(store.root, "outbox");
   if (existsSync(outboxDir)) {
-    for (const fname of await readdir(outboxDir)) {
-      if (!fname.endsWith(".json")) continue;
-      if (!fname.includes(`_to-${peer.name}-`) && !fname.includes(`_to-${peer.name}.json`) && !fname.includes(peer.id)) continue;
-      try {
-        await execFile("rsync", ["-az", join(outboxDir, fname), `${host}:${remotePath}/inbox/${fname}`]);
-        await archiveSent(outboxDir, fname);
-        pushed.push(fname);
-      } catch (e: any) {
-        errors.push(`push ${fname}: ${e.stderr || e.message}`);
+    for (const entry of await readdir(outboxDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith(`${peer.name}-`)) {
+        const subDir = join(outboxDir, entry.name);
+        for (const fname of await readdir(subDir)) {
+          if (!fname.endsWith(".json")) continue;
+          const relPath = `${entry.name}/${fname}`;
+          try {
+            await execFile("rsync", ["-az", join(subDir, fname), `${host}:${remotePath}/inbox/${fname}`]);
+            await archiveSent(outboxDir, relPath);
+            pushed.push(relPath);
+          } catch (e: any) {
+            errors.push(`push ${relPath}: ${e.stderr || e.message}`);
+          }
+        }
+      }
+      // Legacy flat files
+      if (entry.isFile() && entry.name.endsWith(".json")) {
+        if (!entry.name.includes(`_to-${peer.name}-`) && !entry.name.includes(`_to-${peer.name}.json`)) continue;
+        try {
+          await execFile("rsync", ["-az", join(outboxDir, entry.name), `${host}:${remotePath}/inbox/${entry.name}`]);
+          await archiveSent(outboxDir, entry.name);
+          pushed.push(entry.name);
+        } catch (e: any) {
+          errors.push(`push ${entry.name}: ${e.stderr || e.message}`);
+        }
       }
     }
   }

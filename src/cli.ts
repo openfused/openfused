@@ -716,11 +716,14 @@ program
             body,
           });
           if (r.ok) {
-            // Archive to .sent/
+            // Archive to .sent/ within the recipient subdir
             const { mkdir, rename } = await import("node:fs/promises");
-            const sentDir = join(store.root, "outbox", ".sent");
+            const filePath = join(store.root, "outbox", filename);
+            const dir = join(filePath, "..");
+            const sentDir = join(dir, ".sent");
+            const baseName = filename.includes("/") ? filename.split("/").pop()! : filename;
             await mkdir(sentDir, { recursive: true });
-            await rename(join(store.root, "outbox", filename), join(sentDir, filename));
+            await rename(filePath, join(sentDir, baseName));
             console.log(`Delivered to ${name}.`);
           } else {
             console.log(`Queued for ${name}. Endpoint returned ${r.status}. Will deliver on next sync.`);

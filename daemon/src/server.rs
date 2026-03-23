@@ -27,7 +27,7 @@ pub async fn serve(store_path: PathBuf, bind: &str, port: u16, public: bool) {
         .route("/profile", get(get_profile))
         .route("/inbox", post(receive_inbox))
         .route("/outbox/{name}", get(get_outbox))
-        .route("/outbox/{name}/{filename}", delete(ack_outbox));
+        .route("/outbox/{name}/{*filepath}", delete(ack_outbox));
 
     if public {
         tracing::info!("Public mode: serving PROFILE.md + inbox only (safe for internet)");
@@ -151,20 +151,62 @@ async fn get_outbox(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    // Collect messages addressed to this name, include filename for ACK
+    // Compute requester's fingerprint prefix (first 8 hex chars of SHA-256)
+    // to match against the subdir name and legacy filename suffix.
+    let requester_fp = {
+        let hash = Sha256::digest(pubkey_hex.as_bytes());
+        hex::encode(&hash[..4]).to_uppercase()
+    };
+
     let outbox_dir = store.root.join("outbox");
     let mut messages = vec![];
 
     if let Ok(mut entries) = tokio::fs::read_dir(&outbox_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
-            let fname = entry.file_name().to_string_lossy().to_string();
+            let entry_name = entry.file_name().to_string_lossy().to_string();
+
+            // New subdir format: outbox/{name}-{FINGERPRINT}/*.json
+            if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
+                // Match dirs starting with "{name}-" and verify fingerprint
+                let prefix = format!("{}-", safe_name);
+                if !entry_name.starts_with(&prefix) { continue; }
+                let dir_fp = &entry_name[prefix.len()..];
+                if !dir_fp.eq_ignore_ascii_case(&requester_fp) {
+                    tracing::debug!("Outbox dir fingerprint mismatch: dir={}, requester={}", dir_fp, requester_fp);
+                    continue;
+                }
+
+                let sub_dir = entry.path();
+                if let Ok(mut sub_entries) = tokio::fs::read_dir(&sub_dir).await {
+                    while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
+                        let fname = sub_entry.file_name().to_string_lossy().to_string();
+                        if !fname.ends_with(".json") { continue; }
+                        if let Ok(content) = tokio::fs::read_to_string(sub_entry.path()).await {
+                            if let Ok(mut msg) = serde_json::from_str::<serde_json::Value>(&content) {
+                                // Include dir/filename so client can ACK
+                                msg["_outboxFile"] = serde_json::Value::String(format!("{}/{}", entry_name, fname));
+                                messages.push(msg);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // Legacy flat format: outbox/{timestamp}_to-{name}[-{fp}].json
+            let fname = entry_name;
             if !fname.ends_with(".json") { continue; }
-            // Match both new format (_to-name-FINGERPRINT.json) and legacy (_to-name.json)
-            if !fname.contains(&format!("_to-{}-", safe_name)) && !fname.contains(&format!("_to-{}.json", safe_name)) { continue; }
+            if fname.contains(&format!("_to-{}-", safe_name)) {
+                let suffix = fname.trim_end_matches(".json");
+                let fp_part = suffix.rsplit('-').next().unwrap_or("");
+                if !fp_part.eq_ignore_ascii_case(&requester_fp) { continue; }
+            } else if !fname.contains(&format!("_to-{}.json", safe_name)) {
+                continue;
+            }
+
             if let Ok(content) = tokio::fs::read_to_string(entry.path()).await {
                 if let Ok(mut msg) = serde_json::from_str::<serde_json::Value>(&content) {
-                    // Include filename so client can ACK (DELETE /outbox/{name}/{filename})
-                    msg["_outboxFile"] = serde_json::Value::String(fname);
+                    msg["_outboxFile"] = serde_json::Value::String(fname.clone());
                     messages.push(msg);
                 }
             }
@@ -179,11 +221,20 @@ async fn get_outbox(
 /// this after successfully processing each message to prevent duplicate delivery.
 async fn ack_outbox(
     State(store): State<Arc<ContextStore>>,
-    Path((name, filename)): Path<(String, String)>,
+    Path((name, filepath)): Path<(String, String)>,
     headers: axum::http::HeaderMap,
 ) -> Result<StatusCode, StatusCode> {
     let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "");
-    let safe_file = filename.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_' && c != '.', "");
+
+    // filepath can be "subdir/file.json" (new) or "file.json" (legacy)
+    // Sanitize each segment individually to prevent path traversal
+    let sanitized_path: String = filepath
+        .split('/')
+        .filter(|s| !s.is_empty() && *s != "." && *s != "..")
+        .map(|s| s.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_' && c != '.', ""))
+        .collect::<Vec<_>>()
+        .join("/");
+    if sanitized_path.is_empty() { return Err(StatusCode::BAD_REQUEST); }
 
     // Same auth as GET /outbox — verify requester owns this name
     let pubkey_hex = headers.get("x-openfuse-publickey")
@@ -205,8 +256,8 @@ async fn ack_outbox(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let challenge = format!("ACK:{}:{}:{}", safe_name, safe_file, timestamp);
-    if !verify_signature(&safe_name, timestamp, &challenge, sig_b64, pubkey_hex) {
+    let challenge = format!("ACK:{}:{}:{}", safe_name, sanitized_path, timestamp);
+    if !verify_challenge(&challenge, sig_b64, pubkey_hex) {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -216,18 +267,19 @@ async fn ack_outbox(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    // Move to .sent/
+    // Move to .sent/ (within the subdir if applicable)
     let outbox_dir = store.root.join("outbox");
-    let src = outbox_dir.join(&safe_file);
-    if !src.exists() || !safe_file.contains(&format!("_to-{}.json", safe_name)) {
-        return Err(StatusCode::NOT_FOUND);
-    }
+    let src = outbox_dir.join(&sanitized_path);
+    if !src.exists() { return Err(StatusCode::NOT_FOUND); }
 
-    let sent_dir = outbox_dir.join(".sent");
+    // .sent/ lives next to the file
+    let parent = src.parent().unwrap_or(&outbox_dir);
+    let sent_dir = parent.join(".sent");
+    let base_name = src.file_name().unwrap_or_default();
     tokio::fs::create_dir_all(&sent_dir).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    tokio::fs::rename(&src, sent_dir.join(&safe_file)).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tokio::fs::rename(&src, sent_dir.join(base_name)).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    tracing::info!("ACK'd outbox message: {} (moved to .sent/)", safe_file);
+    tracing::info!("ACK'd outbox message: {} (moved to .sent/)", sanitized_path);
     Ok(StatusCode::OK)
 }
 

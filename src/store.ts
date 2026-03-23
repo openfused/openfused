@@ -238,25 +238,35 @@ export class ContextStore {
     validateName(peerId, "Recipient name");
     const config = await this.readConfig();
 
-    // Look up peer's encryption key in keyring
+    // Require recipient in keyring — prevents name-squatting attacks on outbox files
+    // and ensures every envelope has a fingerprint suffix for identity binding.
     const entry = config.keyring.find(
       (e) => e.name === peerId || e.address.startsWith(`${peerId}@`)
     );
+    if (!entry) {
+      throw new Error(
+        `"${peerId}" is not in your keyring. Import their key first:\n` +
+        `  openfuse key import ${peerId} <keyfile>\n` +
+        `  openfuse key trust ${peerId}`
+      );
+    }
 
     let signed: SignedMessage;
-    if (entry?.encryptionKey) {
+    if (entry.encryptionKey) {
       signed = await signAndEncrypt(this.root, config.name, message, entry.encryptionKey);
     } else {
       signed = await signMessage(this.root, config.name, message);
     }
 
-    // Envelope filename includes short fingerprint to disambiguate name collisions.
-    // If recipient isn't in keyring, omit fingerprint — keeps filenames matchable.
-    const shortFp = entry ? `-${entry.fingerprint.replace(/:/g, "").slice(0, 8)}` : "";
+    const shortFp = entry.fingerprint.replace(/:/g, "").slice(0, 8);
+    const recipientDir = `${peerId}-${shortFp}`;
+    const outboxDir = join(this.root, "outbox", recipientDir);
+    await mkdir(outboxDir, { recursive: true });
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `${timestamp}_from-${config.name}_to-${peerId}${shortFp}.json`;
-    await writeFile(join(this.root, "outbox", filename), serializeSignedMessage(signed));
-    return filename;
+    const filename = `${timestamp}_from-${config.name}.json`;
+    await writeFile(join(outboxDir, filename), serializeSignedMessage(signed));
+    return `${recipientDir}/${filename}`;
   }
 
   async readInbox(): Promise<Array<{

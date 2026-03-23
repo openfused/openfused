@@ -20,6 +20,7 @@ export interface SignedMessage {
   message: string;
   signature: string;
   publicKey: string;
+  encryptionKey?: string;  // sender's age public key — lets recipient encrypt replies
   encrypted?: boolean;
 }
 
@@ -120,7 +121,11 @@ export async function signMessage(storeRoot: string, from: string, message: stri
   const payload = Buffer.from(`${from}\n${timestamp}\n${message}`);
   const signature = sign(null, payload, privateKey).toString("base64");
 
-  return { from, timestamp, message, signature, publicKey, encrypted: false };
+  // Include our age public key so recipients can encrypt replies without DNS lookup
+  let encryptionKey: string | undefined;
+  try { encryptionKey = await loadAgeRecipient(storeRoot); } catch {}
+
+  return { from, timestamp, message, signature, publicKey, encryptionKey, encrypted: false };
 }
 
 // --- Encrypt-then-sign ---
@@ -146,7 +151,10 @@ export async function signAndEncrypt(
   const payload = Buffer.from(`${from}\n${timestamp}\n${encoded}`);
   const signature = sign(null, payload, privateKey).toString("base64");
 
-  return { from, timestamp, message: encoded, signature, publicKey, encrypted: true };
+  let encryptionKey: string | undefined;
+  try { encryptionKey = await loadAgeRecipient(storeRoot); } catch {}
+
+  return { from, timestamp, message: encoded, signature, publicKey, encryptionKey, encrypted: true };
 }
 
 export function verifyMessage(signed: SignedMessage): boolean {
