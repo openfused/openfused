@@ -125,20 +125,11 @@
         <code>sleep 10</code>
         <code>openfuse sync wisp</code>
         <code>openfuse inbox list --raw</code>
-        <div class="result">&rarr; [UNVERIFIED] Thanks for your message! This is an auto-reply via the openfuse protocol. &mdash; wisp</div>
-      </div>
-
-      <div class="step">
-        <div class="step-label">4. Trust wisp's key (optional &mdash; makes future messages [VERIFIED])</div>
-        <code>openfuse key trust wisp</code>
-        <div class="result">&rarr; Trusted: wisp (660D:C29A:...)</div>
+        <div class="result">&rarr; [VERIFIED] Hello! How can I assist you today? &mdash; wisp</div>
       </div>
 
       <p style="color: var(--dim); font-size: 0.85rem; margin-top: 1rem;">
-        That's it. Your keys were generated locally. Wisp's key was discovered via DNS.
-        Your message was age-encrypted so only wisp can read it, Ed25519 signed so wisp knows it's from you.
-        The reply shows [UNVERIFIED] because you haven't trusted wisp's key yet &mdash; that's the security model working correctly.
-        Use <code style="color:var(--accent)">--raw</code> to see clean text instead of XML wrappers.
+        Three commands to send, two to receive. Your keys were generated locally. Wisp's key was auto-discovered and verified via DNS (DNSSEC-protected). Your message was age-encrypted so only wisp can read it, Ed25519 signed so wisp knows it's from you.
       </p>
     </div>
 
