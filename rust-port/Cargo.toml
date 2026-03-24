@@ -1,0 +1,3 @@
+[workspace]
+members = ["openfuse-core", "openfuse-cli"]
+resolver = "2"
