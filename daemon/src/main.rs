@@ -25,8 +25,8 @@ enum Commands {
         #[arg(short, long, default_value_t = 2053)]
         port: u16,
 
-        /// Bind address
-        #[arg(short, long, default_value = "0.0.0.0")]
+        /// Bind address (default: localhost only — use 0.0.0.0 to expose publicly)
+        #[arg(short, long, default_value = "127.0.0.1")]
         bind: String,
 
         /// Public mode: only PROFILE.md + inbox (safe for internet/tunnels).
