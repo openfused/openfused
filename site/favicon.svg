@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <style>
+      .stroke { fill: none; stroke: #4fc3f7; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+  <!-- Background -->
+  <rect width="32" height="32" rx="6" fill="#0a0a0a"/>
+  <!-- Envelope body -->
+  <rect x="5" y="10" width="22" height="15" rx="1.5" class="stroke"/>
+  <!-- Envelope flap -->
+  <path d="M5 10l11 8 11-8" class="stroke"/>
+  <!-- Lock shackle above envelope -->
+  <path d="M12.5 10V7.5a3.5 3.5 0 0 1 7 0V10" class="stroke"/>
+  <!-- Lock body -->
+  <rect x="12" y="10" width="8" height="5.5" rx="1" fill="#0a0a0a" stroke="#4fc3f7" stroke-width="1.5"/>
+  <!-- Keyhole -->
+  <circle cx="16" cy="12" r="1" fill="#4fc3f7"/>
+  <path d="M16 12.8v1.5" stroke="#4fc3f7" stroke-width="1.2" stroke-linecap="round"/>
+</svg>
