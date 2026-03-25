@@ -120,7 +120,11 @@ export class ContextStore {
   }
 
   async readConfig(): Promise<MeshConfig> {
-    return await this.core.readConfig() as MeshConfig;
+    const config = await this.core.readConfig() as MeshConfig;
+    // Rust skips empty arrays with skip_serializing_if — ensure keyring/peers always exist
+    if (!config.keyring) config.keyring = [];
+    if (!config.peers) config.peers = [];
+    return config;
   }
 
   async writeConfig(config: MeshConfig): Promise<void> {
