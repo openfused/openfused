@@ -349,7 +349,15 @@ impl ContextStore {
                     signed.message.clone()
                 };
 
-                let wrapped = crypto::wrap_external_message(&signed, verified);
+                // Wrap the decrypted content (not the ciphertext) for LLM display
+                let display_signed = if signed.encrypted {
+                    let mut s = signed.clone();
+                    s.message = content.clone();
+                    s
+                } else {
+                    signed.clone()
+                };
+                let wrapped = crypto::wrap_external_message(&display_signed, verified);
                 messages.push(InboxMessage {
                     file: fname,
                     content,
