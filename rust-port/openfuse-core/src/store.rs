@@ -108,6 +108,9 @@ pub struct MeshConfig {
     /// stores upgrade seamlessly without manual intervention.
     #[serde(rename = "trustedKeys", skip_serializing_if = "Option::is_none")]
     pub trusted_keys: Option<Vec<String>>,
+    /// Workspace mode: auto-trust all imported keys (safe because you control who joins)
+    #[serde(rename = "autoTrust", default, skip_serializing_if = "Option::is_none")]
+    pub auto_trust: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -174,24 +177,12 @@ impl ContextStore {
 
         let context_path = self.root.join("CONTEXT.md");
         if !context_path.exists() {
-            fs::write(
-                &context_path,
-                "# Context\n\n*Working memory — what's happening right now.*\n",
-            )?;
+            fs::write(&context_path, include_str!("../../../templates/CONTEXT.md"))?;
         }
 
-        // PROFILE.md is the public address card — served to peers, synced, shown in registry.
-        // SOUL.md (if it exists) is private identity/personality — never served or synced.
-        // This split lets agents share contact info without exposing system prompts.
         let profile_path = self.root.join("PROFILE.md");
         if !profile_path.exists() {
-            fs::write(
-                &profile_path,
-                format!(
-                    "# {}\n\n**ID:** {}\n\n## Endpoint\n\n_(not configured — run `openfuse register`)_\n",
-                    name, id
-                ),
-            )?;
+            fs::write(&profile_path, include_str!("../../../templates/PROFILE.md"))?;
         }
 
         let (public_key, encryption_key) = crypto::generate_keys(&self.root)?;
@@ -205,6 +196,7 @@ impl ContextStore {
             peers: vec![],
             keyring: vec![],
             trusted_keys: None,
+            auto_trust: None,
         };
         self.write_config(&config)?;
         Ok(())
@@ -334,14 +326,16 @@ impl ContextStore {
                 let sig_valid = crypto::verify_message(&signed);
                 // Identity binding: key must be trusted AND name must match the keyring entry.
                 // Prevents a trusted agent from impersonating someone else via forged "from" field.
-                let trusted = config
-                    .keyring
-                    .iter()
-                    .any(|e| {
-                        e.trusted
-                            && e.signing_key.trim() == signed.public_key.trim()
-                            && (e.name == signed.from || e.address.starts_with(&format!("{}@", signed.from)))
-                    });
+                let auto_trust = config.auto_trust.unwrap_or(false);
+                let key_matches_name = |e: &KeyringEntry| {
+                    e.signing_key.trim() == signed.public_key.trim()
+                        && (e.name == signed.from || e.address.starts_with(&format!("{}@", signed.from)))
+                };
+                let trusted = if auto_trust {
+                    config.keyring.iter().any(key_matches_name)
+                } else {
+                    config.keyring.iter().any(|e| e.trusted && key_matches_name(e))
+                };
 
                 let verified = sig_valid && trusted;
 
@@ -423,6 +417,150 @@ impl ContextStore {
         let shared_dir = self.root.join("shared");
         fs::create_dir_all(&shared_dir)?;
         fs::write(shared_dir.join(base), content)?;
+        Ok(())
+    }
+
+    // --- Compact ---
+
+    /// Move [DONE] sections from CONTEXT.md to history/{date}.md.
+    /// Returns (moved_count, kept_count).
+    pub fn compact_context(&self) -> Result<(usize, usize)> {
+        let context = self.read_context()?;
+        let mut kept = Vec::new();
+        let mut done = Vec::new();
+        let mut current_section = String::new();
+        let mut in_section = false;
+
+        for line in context.lines() {
+            if line.starts_with("## ") || line.starts_with("### ") {
+                if in_section {
+                    if current_section.contains("[DONE]") {
+                        done.push(current_section.clone());
+                    } else {
+                        kept.push(current_section.clone());
+                    }
+                }
+                current_section = format!("{}\n", line);
+                in_section = true;
+            } else if in_section {
+                current_section.push_str(line);
+                current_section.push('\n');
+            } else {
+                // Content before any section header (title, etc)
+                kept.push(format!("{}\n", line));
+            }
+        }
+        // Flush last section
+        if in_section {
+            if current_section.contains("[DONE]") {
+                done.push(current_section);
+            } else {
+                kept.push(current_section);
+            }
+        }
+
+        if done.is_empty() {
+            return Ok((0, kept.len()));
+        }
+
+        // Write kept sections back to CONTEXT.md
+        let kept_text = kept.join("");
+        self.write_context(kept_text.trim_end())?;
+
+        // Append done sections to history/{date}.md
+        let history_dir = self.root.join("history");
+        fs::create_dir_all(&history_dir)?;
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let history_file = history_dir.join(format!("{}.md", date));
+
+        let mut archive = if history_file.exists() {
+            fs::read_to_string(&history_file)?
+        } else {
+            format!("# Archived — {}\n\n", date)
+        };
+        for section in &done {
+            archive.push_str(section);
+            archive.push('\n');
+        }
+        fs::write(&history_file, &archive)?;
+
+        Ok((done.len(), kept.len()))
+    }
+
+    // --- Inbox archive ---
+
+    /// Archive a single inbox message to inbox/.read/
+    pub fn archive_inbox(&self, filename: &str) -> Result<()> {
+        let base = std::path::Path::new(filename)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .filter(|n| !n.is_empty() && !n.contains(".."))
+            .ok_or_else(|| anyhow::anyhow!("Invalid filename: {}", filename))?;
+        let inbox_dir = self.root.join("inbox");
+        let archive_dir = inbox_dir.join(".read");
+        fs::create_dir_all(&archive_dir)?;
+        let src = inbox_dir.join(base);
+        let dst = archive_dir.join(base);
+        if !src.exists() {
+            anyhow::bail!("Message not found: {}", base);
+        }
+        fs::rename(&src, &dst)?;
+        Ok(())
+    }
+
+    /// Archive all inbox messages to inbox/.read/
+    pub fn archive_inbox_all(&self) -> Result<usize> {
+        let inbox_dir = self.root.join("inbox");
+        let archive_dir = inbox_dir.join(".read");
+        fs::create_dir_all(&archive_dir)?;
+        let mut count = 0;
+        if inbox_dir.exists() {
+            for entry in fs::read_dir(&inbox_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_file() {
+                    let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if fname.ends_with(".json") || fname.ends_with(".md") {
+                        fs::rename(&path, archive_dir.join(fname))?;
+                        count += 1;
+                    }
+                }
+            }
+        }
+        Ok(count)
+    }
+
+    // --- Workspace ---
+
+    /// Initialize as a shared workspace (multi-agent collaboration).
+    pub fn init_workspace(&self, name: &str, id: &str) -> Result<()> {
+        fs::create_dir_all(&self.root)?;
+        for dir in &["tasks", "messages", "_broadcast", "shared", "history"] {
+            fs::create_dir_all(self.root.join(dir))?;
+        }
+
+        let charter_path = self.root.join("CHARTER.md");
+        if !charter_path.exists() {
+            fs::write(&charter_path, include_str!("../../../templates/CHARTER.md"))?;
+        }
+
+        let context_path = self.root.join("CONTEXT.md");
+        if !context_path.exists() {
+            fs::write(&context_path, include_str!("../../../templates/CONTEXT.md"))?;
+        }
+
+        let config = MeshConfig {
+            id: id.to_string(),
+            name: name.to_string(),
+            created: chrono::Utc::now().to_rfc3339(),
+            public_key: None,
+            encryption_key: None,
+            peers: vec![],
+            keyring: vec![],
+            trusted_keys: None,
+            auto_trust: Some(true),
+        };
+        self.write_config(&config)?;
         Ok(())
     }
 

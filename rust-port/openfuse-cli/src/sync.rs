@@ -62,8 +62,7 @@ fn parse_url(url: &str) -> Result<Transport> {
         Ok(Transport::Http {
             base_url: url.trim_end_matches('/').to_string(),
         })
-    } else if url.starts_with("ssh://") {
-        let rest = &url[6..];
+    } else if let Some(rest) = url.strip_prefix("ssh://") {
         let (host, path) = rest
             .split_once(':')
             .context("SSH URL must be ssh://host:/path")?;

@@ -1,6 +1,6 @@
 [package]
 name = "openfuse-core"
-version = "0.3.13"
+version = "0.3.23"
 edition = "2021"
 description = "Core library for OpenFused — crypto, store, message types. Compiles to wasm32-wasip1."
 license = "MIT"

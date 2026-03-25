@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use openfuse_core::{crypto, store, ContextStore};
+use openfuse_core::{crypto, store, validity, ContextStore};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -23,12 +23,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize a new context store
+    /// Initialize a new context store or shared workspace
     Init {
         #[arg(short, long, default_value = "agent")]
         name: String,
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
+        /// Initialize as a shared workspace (CHARTER.md + tasks/ + messages/ + _broadcast/)
+        #[arg(long)]
+        workspace: bool,
     },
     /// Show context store status
     Status {
@@ -88,9 +91,9 @@ enum Commands {
     Register {
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
-        /// Endpoint URL where peers can reach this agent
+        /// Endpoint URL where peers can reach this agent (optional — keys-only registration)
         #[arg(short, long)]
-        endpoint: String,
+        endpoint: Option<String>,
         /// Registry path (default: ~/.openfuse/registry or OPENFUSE_REGISTRY env)
         #[arg(short, long)]
         registry: Option<String>,
@@ -129,6 +132,22 @@ enum Commands {
         #[arg(short, long)]
         registry: Option<String>,
     },
+    /// Compact CONTEXT.md — move [DONE] sections to history/
+    Compact {
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// Also prune sections with expired validity windows (confidence < 0.1)
+        #[arg(long)]
+        prune_stale: bool,
+    },
+    /// Validate CONTEXT.md — check validity windows for stale entries
+    Validate {
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -146,6 +165,16 @@ enum InboxCommands {
         message: String,
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
+    },
+    /// Archive processed inbox messages to inbox/.read/
+    Archive {
+        /// Specific message filename to archive (or --all)
+        file: Option<String>,
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// Archive all inbox messages
+        #[arg(long)]
+        all: bool,
     },
 }
 
@@ -226,7 +255,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { name, dir } => {
+        Commands::Init { name, dir, workspace } => {
             store::validate_name(&name, "Agent name")?;
             let dir = dir.canonicalize().unwrap_or(dir.clone());
             let s = ContextStore::new(&dir);
@@ -235,14 +264,28 @@ async fn main() -> Result<()> {
                 std::process::exit(1);
             }
             let id = nanoid::nanoid!(12);
-            s.init(&name, &id)?;
-            println!("Initialized context store: {}", dir.display());
-            let config = s.read_config()?;
-            println!("  Agent ID: {}", id);
-            println!("  Name: {}", name);
-            println!("  Signing key: {}", config.public_key.as_deref().unwrap_or("?"));
-            println!("  Encryption key: {}", config.encryption_key.as_deref().unwrap_or("?"));
-            println!("  Fingerprint: {}", crypto::fingerprint(config.public_key.as_deref().unwrap_or("")));
+            if workspace {
+                s.init_workspace(&name, &id)?;
+                println!("Initialized shared workspace: {}", dir.display());
+                println!("  Workspace: {} ({})", name, id);
+                println!("\nStructure:");
+                println!("  CHARTER.md   — workspace rules and purpose");
+                println!("  CONTEXT.md   — shared working memory");
+                println!("  tasks/       — task coordination");
+                println!("  messages/    — agent-to-agent DMs");
+                println!("  _broadcast/  — announcements to all members");
+                println!("  shared/      — shared files & artifacts");
+                println!("\nautoTrust is ON — imported keys are trusted by default.");
+            } else {
+                s.init(&name, &id)?;
+                println!("Initialized context store: {}", dir.display());
+                let config = s.read_config()?;
+                println!("  Agent ID: {}", id);
+                println!("  Name: {}", name);
+                println!("  Signing key: {}", config.public_key.as_deref().unwrap_or("?"));
+                println!("  Encryption key: {}", config.encryption_key.as_deref().unwrap_or("?"));
+                println!("  Fingerprint: {}", crypto::fingerprint(config.public_key.as_deref().unwrap_or("")));
+            }
         }
 
         Commands::Status { dir } => {
@@ -270,7 +313,8 @@ async fn main() -> Result<()> {
             } else if let Some(text) = append {
                 let existing = s.read_context()?;
                 let text = text.replace("\\n", "\n");
-                s.write_context(&format!("{}\n{}", existing, text))?;
+                let ts = chrono::Utc::now().to_rfc3339();
+                s.write_context(&format!("{}\n<!-- openfuse:added: {} -->\n{}", existing, ts, text))?;
                 println!("Context appended.");
             } else {
                 print!("{}", s.read_context()?);
@@ -304,6 +348,19 @@ async fn main() -> Result<()> {
                     } else {
                         println!("{}", msg.wrapped_content);
                     }
+                }
+            }
+            InboxCommands::Archive { file, dir, all } => {
+                let s = ContextStore::new(&dir);
+                if all {
+                    let count = s.archive_inbox_all()?;
+                    println!("Archived {} messages to inbox/.read/", count);
+                } else if let Some(filename) = file {
+                    s.archive_inbox(&filename)?;
+                    println!("Archived: {}", filename);
+                } else {
+                    eprintln!("Specify a filename or --all");
+                    std::process::exit(1);
                 }
             }
             InboxCommands::Send { peer_id, message, dir } => {
@@ -419,16 +476,21 @@ async fn main() -> Result<()> {
                     println!("Key already in keyring (fingerprint: {})", fp);
                     return Ok(());
                 }
+                let auto_trust = config.auto_trust.unwrap_or(false);
                 config.keyring.push(crypto::KeyringEntry {
                     name: name.clone(), address: addr.clone(), signing_key,
-                    encryption_key, fingerprint: fp.clone(), trusted: false,
+                    encryption_key, fingerprint: fp.clone(), trusted: auto_trust,
                     added: chrono::Utc::now().to_rfc3339(),
                 });
                 s.write_config(&config)?;
                 println!("Imported key for: {}", name);
                 if !addr.is_empty() { println!("  Address: {}", addr); }
                 println!("  Fingerprint: {}", fp);
-                println!("\nKey is NOT trusted yet. Run: openfuse key trust {}", name);
+                if auto_trust {
+                    println!("  Auto-trusted (workspace mode)");
+                } else {
+                    println!("\nKey is NOT trusted yet. Run: openfuse key trust {}", name);
+                }
             }
             KeyCommands::Trust { name, dir } => {
                 let s = ContextStore::new(&dir);
@@ -518,10 +580,15 @@ async fn main() -> Result<()> {
             let s = ContextStore::new(&dir);
             if !s.exists() { eprintln!("No context store found. Run `openfuse init` first."); std::process::exit(1); }
             let reg = registry::resolve_registry(reg_flag.as_deref());
-            let manifest = registry::register(&s, &endpoint, &reg).await?;
+            let ep = endpoint.as_deref().unwrap_or("");
+            let manifest = registry::register(&s, ep, &reg).await?;
             let verified = if manifest.signature.is_some() { " [SIGNED]" } else { "" };
             println!("Registered: {}{}", manifest.name, verified);
-            println!("  Endpoint:    {}", manifest.endpoint);
+            if manifest.endpoint.is_empty() {
+                println!("  Endpoint:    (keys only — no endpoint)");
+            } else {
+                println!("  Endpoint:    {}", manifest.endpoint);
+            }
             println!("  Fingerprint: {}", manifest.fingerprint);
             println!("  Registry:    {}", reg);
         }
@@ -582,7 +649,7 @@ async fn main() -> Result<()> {
                     println!("  Run `openfuse key trust {}` to trust this key", manifest.name);
                 }
 
-                s.send_inbox(&name, &message, &config.id)?;
+                s.send_inbox(&name, &message, &config.name)?;
 
                 let endpoint = &manifest.endpoint;
                 if endpoint.starts_with("http://") || endpoint.starts_with("https://")
@@ -612,8 +679,54 @@ async fn main() -> Result<()> {
                     println!("Mount the endpoint and sync, or manually copy from outbox/");
                 }
             } else {
-                s.send_inbox(&name, &message, &config.id)?;
+                s.send_inbox(&name, &message, &config.name)?;
                 println!("Message sent to {}'s outbox. Run `openfuse sync` to deliver.", name);
+            }
+        }
+
+        Commands::Compact { dir, prune_stale } => {
+            let s = ContextStore::new(&dir);
+            if !s.exists() { eprintln!("No context store found."); std::process::exit(1); }
+
+            if prune_stale {
+                let content = s.read_context()?;
+                let (pruned_content, pruned_count) = validity::prune_stale_sections(&content);
+                if pruned_count > 0 {
+                    s.write_context(&pruned_content)?;
+                    println!("Pruned {} stale validity sections.", pruned_count);
+                }
+            }
+
+            let (moved, kept) = s.compact_context()?;
+            if moved > 0 {
+                println!("Compacted: {} [DONE] sections moved to history/, {} kept.", moved, kept);
+            } else {
+                println!("Nothing to compact (no [DONE] sections found).");
+            }
+        }
+
+        Commands::Validate { dir, json } => {
+            let s = ContextStore::new(&dir);
+            if !s.exists() { eprintln!("No context store found."); std::process::exit(1); }
+            let content = s.read_context()?;
+            let report = validity::build_validity_report(&content);
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!("Validity report: {} fresh, {} stale\n", report.fresh, report.stale);
+                for entry in &report.entries {
+                    let status = if entry.expired { "STALE" } else { "fresh" };
+                    println!("  [{}] {} (ttl: {}, confidence: {:.2})",
+                        status, entry.header, entry.ttl_str, entry.confidence);
+                    if let Some(ref added) = entry.added {
+                        println!("         added: {}", added);
+                    }
+                }
+                if report.entries.is_empty() {
+                    println!("  No validity annotations found.");
+                    println!("  Add <!-- validity: 6h --> to time-sensitive sections.");
+                }
             }
         }
     }
