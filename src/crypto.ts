@@ -1,6 +1,10 @@
 // Crypto module — delegates to Rust WASM core for all operations.
 // Keeps the same public API so cli.ts, sync.ts, watch.ts, registry.ts don't change.
 
+import { createHash, verify as cryptoVerify, createPublicKey } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { WasmCore } from "./wasm-core.js";
 
 const KEY_DIR = ".keys";
@@ -35,17 +39,12 @@ export async function generateKeys(storeRoot: string): Promise<{ publicKey: stri
 }
 
 export async function hasKeys(storeRoot: string): Promise<boolean> {
-  const { existsSync } = await import("node:fs");
-  const { join } = await import("node:path");
   return existsSync(join(storeRoot, KEY_DIR, "private.key"));
 }
 
 // --- Fingerprint ---
 
 export function fingerprint(publicKey: string): string {
-  // Fingerprint is pure computation — fast enough to call WASM synchronously
-  // But node:wasi is async, so we use the same JS implementation for sync callers
-  const { createHash } = require("node:crypto");
   const hash = createHash("sha256").update(publicKey).digest();
   const pairs: string[] = [];
   for (let i = 0; i < 16; i++) {
@@ -61,8 +60,6 @@ export function fingerprint(publicKey: string): string {
 // --- Signing ---
 
 export async function loadAgeRecipient(storeRoot: string): Promise<string> {
-  const { readFile } = await import("node:fs/promises");
-  const { join } = await import("node:path");
   return (await readFile(join(storeRoot, KEY_DIR, "age.pub"), "utf-8")).trim();
 }
 
@@ -87,14 +84,11 @@ export async function signAndEncrypt(
 }
 
 export function verifyMessage(signed: SignedMessage): boolean {
-  // Verification is sync in the TS API — keep using Node.js crypto for this
-  // since WASM calls are async. This is pure math, no keys needed.
   try {
-    const { verify, createPublicKey } = require("node:crypto");
     const payload = Buffer.from(`${signed.from}\n${signed.timestamp}\n${signed.message}`);
     const x = Buffer.from(signed.publicKey.trim(), "hex").toString("base64url");
     const pubKey = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x }, format: "jwk" });
-    return verify(null, payload, pubKey, Buffer.from(signed.signature, "base64"));
+    return cryptoVerify(null, payload, pubKey, Buffer.from(signed.signature, "base64"));
   } catch {
     return false;
   }
