@@ -1,4 +1,3 @@
-mod fuse_fs;
 mod server;
 mod store;
 
@@ -7,7 +6,7 @@ use std::path::PathBuf;
 use tracing_subscriber;
 
 #[derive(Parser)]
-#[command(name = "openfused", about = "FUSE daemon for OpenFused agent messaging")]
+#[command(name = "openfused", about = "HTTP daemon for OpenFused agent messaging")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -15,7 +14,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the daemon: serve local context store over HTTP + mount remote peers via FUSE
+    /// Start the daemon: serve local context store over HTTP
     Serve {
         /// Path to the context store
         #[arg(short, long, default_value = ".")]
@@ -34,15 +33,6 @@ enum Commands {
         #[arg(long)]
         public: bool,
     },
-
-    /// Mount a remote peer's context store locally via FUSE
-    Mount {
-        /// Remote peer URL (e.g. http://agent-bob:2053)
-        url: String,
-
-        /// Local mount point
-        mountpoint: PathBuf,
-    },
 }
 
 #[tokio::main]
@@ -55,10 +45,6 @@ async fn main() {
             let store_path = store.canonicalize().unwrap_or(store);
             tracing::info!("Serving context store: {:?} on {}:{}", store_path, bind, port);
             server::serve(store_path, &bind, port, public).await;
-        }
-        Commands::Mount { url, mountpoint } => {
-            tracing::info!("Mounting {} at {:?}", url, mountpoint);
-            fuse_fs::mount_remote(&url, &mountpoint).await;
         }
     }
 }

@@ -62,12 +62,17 @@ That changes everything about how this should be designed.
 - [x] **Key revocation** — `openfuse revoke` permanently invalidates key (Rust CLI)
 - [x] **Key rotation** — `openfuse rotate` swaps keypair, old key signs transition (Rust CLI)
 
-### v0.6 — Shared Buckets *(next)*
+### v0.6 — Mounting & Shared Buckets *(next)*
+- [ ] **`openfuse mount <peer>`** — convenience wrapper: reads peer URL from config, calls sshfs/rclone
+- [ ] **`openfuse unmount <peer>`** — clean unmount
+- [ ] **Transport auto-detection** — `ssh://` → sshfs, `s3://`/`gs://`/`r2://` → rclone, `https://` → rclone WebDAV
 - [ ] **`openfuse init --bucket gs://my-bucket`** — initialize a store on a cloud bucket
-- [ ] **S3/GCS/R2 as shared filesystem** — multiple agents mount same bucket via s3fs/gcsfuse
+- [ ] **S3/GCS/R2 as shared filesystem** — multiple agents mount same bucket via s3fs/gcsfuse/rclone
 - [ ] **IAM prefix scoping** — each agent only writes to `{name}/`, reads from peers
 - [ ] **Dual-mount pattern** — two agents mount same bucket, zero-config messaging
 - [ ] **Bucket-based workspaces** — CHARTER.md + tasks/ + messages/ on a shared bucket
+- [x] **Removed custom FUSE code** — sshfs/rclone/gcsfuse do this better, no need to reinvent
+- [ ] **WebDAV on daemon** — future: if live HTTP mounts are needed, add WebDAV so rclone works natively
 
 ### v0.6 — Reachability (NAT Traversal)
 Most agents are already reachable with what exists. The goal isn't to build one solution — it's to support the right tier for each deployment.
@@ -120,7 +125,9 @@ GET  /inbox/{agent}  → pull your mail (authenticated)
 - [ ] OpenShell is the walls. OpenFused is the mailboxes between rooms.
 
 ### v0.8 — Rust WASI Consolidation
-- [ ] **Split Rust into core lib + CLI** — core (crypto, store, keyring) has no tokio/networking dependency
+- [x] **Split Rust into core lib + CLI** — `openfuse-core` (crypto, store, keyring, validity) + `openfuse-cli` (networking, watch)
+- [x] **Core has no tokio/networking** — pure std::fs, WASM-safe
+- [x] **CLI at parity with TS v0.3.23** — all commands ported including compact, validate, archive, workspace
 - [ ] **Compile core to `wasm32-wasip1`** — runs in Node.js via `node:wasi` with `preopens` for filesystem
 - [ ] **TS SDK wraps WASM** — `import { init, send, discover } from "openfused"` calls Rust via WASM
 - [ ] **One implementation, two interfaces** — native binary for CLI, WASM for Node.js/npm
