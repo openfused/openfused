@@ -17,6 +17,9 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
       - name: Sync version from git tag
         run: |
           VERSION=${GITHUB_REF_NAME#v}
