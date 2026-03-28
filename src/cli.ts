@@ -737,4 +737,92 @@ program
     }
   });
 
+// --- tasks (A2A) ---
+const tasks = program.command("tasks").description("Manage A2A tasks on the daemon");
+
+tasks
+  .command("list")
+  .description("List all tasks from the daemon")
+  .option("--url <url>", "Daemon URL", "http://127.0.0.1:2053")
+  .option("--token <token>", "Bearer token (also reads OPENFUSE_TOKEN env)")
+  .option("--json", "Output raw JSON")
+  .action(async (opts: { url: string; token?: string; json?: boolean }) => {
+    const token = opts.token || process.env.OPENFUSE_TOKEN;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${opts.url}/tasks`, { headers });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`Error ${res.status}: ${body}`);
+      process.exit(1);
+    }
+    const data = (await res.json()) as { tasks: any[] };
+
+    if (opts.json) {
+      console.log(JSON.stringify(data.tasks, null, 2));
+      return;
+    }
+
+    if (data.tasks.length === 0) {
+      console.log("No tasks.");
+      return;
+    }
+
+    for (const t of data.tasks) {
+      const created = t._openfuse?.createdAt?.slice(0, 19) || "";
+      const msgs = t.history?.length || 0;
+      const arts = t.artifacts?.length || 0;
+      console.log(`  ${t.id}  [${t.status.state}]  ${msgs} msg, ${arts} artifact  ${created}`);
+    }
+  });
+
+tasks
+  .command("get <id>")
+  .description("Get a specific task by ID")
+  .option("--url <url>", "Daemon URL", "http://127.0.0.1:2053")
+  .option("--token <token>", "Bearer token (also reads OPENFUSE_TOKEN env)")
+  .option("--json", "Output raw JSON")
+  .action(async (id: string, opts: { url: string; token?: string; json?: boolean }) => {
+    const token = opts.token || process.env.OPENFUSE_TOKEN;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${opts.url}/tasks/${encodeURIComponent(id)}`, { headers });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`Error ${res.status}: ${body}`);
+      process.exit(1);
+    }
+    const task = (await res.json()) as any;
+
+    if (opts.json) {
+      console.log(JSON.stringify(task, null, 2));
+      return;
+    }
+
+    console.log(`Task:    ${task.id}`);
+    console.log(`State:   ${task.status.state}`);
+    if (task.contextId) console.log(`Context: ${task.contextId}`);
+    if (task._openfuse) {
+      console.log(`Created: ${task._openfuse.createdAt}`);
+      console.log(`Updated: ${task._openfuse.updatedAt}`);
+    }
+
+    if (task.history?.length > 0) {
+      console.log(`\nHistory (${task.history.length} messages):`);
+      for (const msg of task.history) {
+        const text = msg.parts?.map((p: any) => p.text).filter(Boolean).join(" ") || "(non-text)";
+        console.log(`  [${msg.role}] ${text.slice(0, 120)}`);
+      }
+    }
+
+    if (task.artifacts?.length > 0) {
+      console.log(`\nArtifacts (${task.artifacts.length}):`);
+      for (const a of task.artifacts) {
+        console.log(`  ${a.artifactId}: ${a.name || "(unnamed)"}`);
+      }
+    }
+  });
+
 program.parse();
