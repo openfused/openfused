@@ -38,22 +38,28 @@ jobs:
       - uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
         with:
           toolchain: stable
-      - name: Sync version from git tag
+      - name: Sync versions and publish openfused-core
         run: |
           VERSION=${GITHUB_REF_NAME#v}
+          # Version sync
           for f in rust-port/openfuse-core/Cargo.toml rust-port/openfuse-cli/Cargo.toml daemon/Cargo.toml; do
             sed -i "0,/^version = /s/^version = \".*\"/version = \"$VERSION\"/" "$f"
           done
-          # Replace path+version dep with version-only dep for crates.io publishing
-          sed -i "s|openfused-core = { path = \"../openfuse-core\", version = \"[^\"]*\" }|openfused-core = \"$VERSION\"|" rust-port/openfuse-cli/Cargo.toml
-      - name: Publish openfused-core
-        run: cd rust-port/openfuse-core && cargo publish --allow-dirty
+          # Publish core first — temporarily remove CLI from workspace to avoid
+          # resolution of openfused-core from crates.io (it doesn't exist yet)
+          sed -i 's|members = \["openfuse-core", "openfuse-cli"\]|members = ["openfuse-core"]|' rust-port/Cargo.toml
+          cd rust-port && cargo publish -p openfused-core --allow-dirty
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
       - name: Wait for crates.io indexing
-        run: sleep 30
+        run: sleep 60
       - name: Publish openfused (CLI)
-        run: cd rust-port/openfuse-cli && cargo publish --allow-dirty
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          # Restore workspace, replace path dep with published version
+          sed -i 's|members = \["openfuse-core"\]|members = ["openfuse-core", "openfuse-cli"]|' rust-port/Cargo.toml
+          sed -i "s|openfused-core = { path = \"../openfuse-core\", version = \"[^\"]*\" }|openfused-core = \"$VERSION\"|" rust-port/openfuse-cli/Cargo.toml
+          cd rust-port && cargo publish -p openfused --allow-dirty
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
 
