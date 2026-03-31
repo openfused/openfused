@@ -7,8 +7,7 @@ daemon/target/
 rust/target/
 .peers/
 mesh-alice/
-mesh/*/inbox/
-mesh/*/outbox/
+mesh/
 store/inbox/
 store/outbox/
 store/.keys/
@@ -23,6 +22,7 @@ drafts/
 hosted/
 mailbox/
 worker/
+site/
 demo/
 rust-port/target/
 wasm/*.wasm
