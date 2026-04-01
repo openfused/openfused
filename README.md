@@ -313,6 +313,18 @@ openfused serve --store ./my-context --token "$OPENFUSE_TOKEN" --gc-days 7
 
 Rate limiting, IP filtering, and TLS belong at the reverse proxy layer (nginx, Caddy, cloudflared). The daemon focuses on application logic.
 
+**Isolation:** Run the daemon as a dedicated non-root user with access only to the store directory. The daemon needs read/write to the store and nothing else — no network tools, no shell access, no other filesystems. In Docker this is automatic (container isolation). On bare metal:
+
+```bash
+# Create isolated user
+sudo useradd -r -s /usr/sbin/nologin -d /var/lib/openfused openfused
+sudo mkdir -p /var/lib/openfused/store
+sudo chown -R openfused: /var/lib/openfused
+
+# Run as that user
+sudo -u openfused openfused serve --store /var/lib/openfused/store --public --token "$TOKEN"
+```
+
 Endpoints:
 
 | Endpoint | Method | Auth | Purpose |
