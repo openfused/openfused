@@ -705,7 +705,8 @@ program
   .option("-r, --registry <url>", "Registry URL")
   .option("--http", "Force HTTP delivery (uses registry endpoint)")
   .option("--ssh", "Force SSH delivery (uses local peer SSH URL)")
-  .action(async (name: string, message: string, opts: { dir: string; registry?: string; http?: boolean; ssh?: boolean }) => {
+  .option("--trust", "Auto-trust the recipient's key (skip manual fingerprint verification)")
+  .action(async (name: string, message: string, opts: { dir: string; registry?: string; http?: boolean; ssh?: boolean; trust?: boolean }) => {
     const store = new ContextStore(resolve(opts.dir));
     const reg = registry.resolveRegistry(opts.registry);
     let config = await store.readConfig();
@@ -722,16 +723,23 @@ program
         if (manifest.endpoint?.startsWith("http")) httpEndpoint = manifest.endpoint;
 
         // Auto-import key + add as peer
-        if (!config.keyring.some((e) => e.signingKey === manifest.publicKey)) {
+        const existing = config.keyring.find((e) => e.signingKey === manifest.publicKey);
+        if (!existing) {
           config.keyring.push({
             name: manifest.name,
             address: `${manifest.name}@registry`,
             signingKey: manifest.publicKey,
             encryptionKey: manifest.encryptionKey,
             fingerprint: manifest.fingerprint,
-            trusted: false,
+            trusted: !!opts.trust,
             added: new Date().toISOString(),
           });
+          if (opts.trust) {
+            console.log(`Trusted ${manifest.name} (${manifest.fingerprint})`);
+          }
+        } else if (opts.trust && !existing.trusted) {
+          existing.trusted = true;
+          console.log(`Trusted ${manifest.name} (${existing.fingerprint})`);
         }
         if (manifest.endpoint && !config.peers.some((p) => p.name === manifest.name)) {
           config.peers.push({
