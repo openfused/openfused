@@ -138,8 +138,19 @@ inbox
   .description("List inbox messages")
   .option("-d, --dir <path>", "Context store directory", ".")
   .option("--raw", "Show raw content instead of wrapped")
+  .option("--no-sync", "Skip pulling from remote peers before listing")
   .action(async (opts) => {
     const store = new ContextStore(resolve(opts.dir));
+    // Auto-sync: pull new messages from remote peers before listing
+    if (opts.sync !== false) {
+      try {
+        const config = await store.readConfig();
+        if (config.peers.length > 0) {
+          const { syncAll } = await import("./sync.js");
+          await syncAll(store);
+        }
+      } catch {}
+    }
     const messages = await store.readInbox();
     if (messages.length === 0) {
       console.log("Inbox is empty.");
