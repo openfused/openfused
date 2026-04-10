@@ -1,3 +1,8 @@
 [workspace]
-members = ["openfuse-core", "openfuse-cli", "openfuse-daemon"]
+members = ["openfuse-core", "openfuse-cli"]
 resolver = "2"
+
+[profile.release]
+lto = true
+strip = true
+panic = "abort"

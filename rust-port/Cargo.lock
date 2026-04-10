@@ -1373,16 +1373,25 @@ name = "openfused"
 version = "0.5.0"
 dependencies = [
  "anyhow",
+ "axum",
  "chrono",
  "clap",
+ "fs2",
+ "hex",
  "nanoid",
  "notify",
  "openfused-core",
+ "rand 0.8.5",
  "regex",
  "reqwest",
  "serde",
  "serde_json",
+ "subtle",
  "tokio",
+ "tokio-stream",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1399,28 +1408,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
-]
-
-[[package]]
-name = "openfused-daemon"
-version = "0.5.0"
-dependencies = [
- "axum",
- "chrono",
- "clap",
- "fs2",
- "hex",
- "notify",
- "openfused-core",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "subtle",
- "tokio",
- "tokio-stream",
- "tower-http",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
