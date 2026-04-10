@@ -106,7 +106,7 @@ message content (XML-escaped to prevent injection)
 
 ```
 dig TXT _openfuse.wisp.openfused.net
-→ "v=of1 e=https://wisp.openfused.dev pk=... ek=age1... fp=..."
+→ "v=of1 e=https://demo.openfused.dev pk=... ek=age1... fp=..."
 ```
 
 Self-hosted: `_openfuse.bot.company.com` — add your own TXT record.
