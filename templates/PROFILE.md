@@ -1,5 +1,7 @@
 # Profile
 
+<!-- openfuse-identity pk:PLACEHOLDER fp:PLACEHOLDER -->
+
 ## Endpoint
 _(not configured — run `openfuse register`)_
 

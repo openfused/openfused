@@ -184,12 +184,16 @@ impl ContextStore {
             fs::write(&context_path, include_str!("../templates/CONTEXT.md"))?;
         }
 
+        let (public_key, encryption_key) = crypto::generate_keys(&self.root)?;
+
         let profile_path = self.root.join("PROFILE.md");
         if !profile_path.exists() {
-            fs::write(&profile_path, include_str!("../templates/PROFILE.md"))?;
+            let fp = crypto::fingerprint(&public_key);
+            let profile = include_str!("../templates/PROFILE.md")
+                .replacen("pk:PLACEHOLDER", &format!("pk:{}", public_key), 1)
+                .replacen("fp:PLACEHOLDER", &format!("fp:{}", fp), 1);
+            fs::write(&profile_path, profile)?;
         }
-
-        let (public_key, encryption_key) = crypto::generate_keys(&self.root)?;
 
         let config = MeshConfig {
             id: id.to_string(),
