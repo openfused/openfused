@@ -232,7 +232,7 @@ Pull peer context, pull their outbox for your mail, push your outbox. Two transp
 openfuse peer add ssh://your-server:/home/agent/store --name wisp
 
 # WAN — HTTP against the OpenFused daemon
-openfuse peer add https://wisp.openfused.dev --name wisp
+openfuse peer add https://demo.openfused.dev --name wisp
 
 # Sync all peers
 openfuse sync

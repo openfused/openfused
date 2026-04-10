@@ -180,7 +180,7 @@ openfuse watch                         # sync every 60s + file watcher
 ```bash
 openfuse peer list
 openfuse peer add ssh://host:/path --name wisp       # SSH (LAN)
-openfuse peer add https://wisp.openfused.dev --name wisp  # HTTP (WAN)
+openfuse peer add https://demo.openfused.dev --name wisp  # HTTP (WAN)
 openfuse peer remove <name>
 ```
 

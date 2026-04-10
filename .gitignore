@@ -27,6 +27,7 @@ demo/
 rust-port/target/
 wasm/*.wasm
 wearethecompute.md
+wisp-profile.md
 .wrangler/
 
 # Sandbox/editor environment files (Codex, IDE, etc.)
