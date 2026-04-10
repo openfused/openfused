@@ -43,3 +43,5 @@ wisp-profile.md
 .idea/
 .vscode/
 .mcpregistry_*
+.claude/
+docs/superpowers/
