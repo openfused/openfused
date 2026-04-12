@@ -7,7 +7,7 @@ use std::env;
 use std::path::Path;
 use std::process;
 
-use openfused_core::{crypto, store, validity};
+use openfused::{crypto, store, validity};
 
 fn main() {
     let args: Vec<String> = env::args().collect();

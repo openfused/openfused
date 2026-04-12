@@ -15,7 +15,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use openfused_core::{crypto, store, validity, ContextStore};
+use openfused::{crypto, store, validity, ContextStore};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 

@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
-use openfused_core::{crypto, ContextStore};
+use openfused::{crypto, ContextStore};
 
 pub const DEFAULT_REGISTRY: &str = "https://registry.openfused.dev";
 
@@ -192,7 +192,7 @@ pub fn verify_manifest(manifest: &Manifest) -> bool {
     let Some(ref sig) = manifest.signature else { return false; };
     let Some(ref signed_at) = manifest.signed_at else { return false; };
     let canonical = canonical_manifest(manifest);
-    let signed = openfused_core::SignedMessage {
+    let signed = openfused::SignedMessage {
         from: manifest.name.clone(), timestamp: signed_at.clone(), message: canonical,
         signature: sig.clone(), public_key: manifest.public_key.clone(),
         encryption_key: manifest.encryption_key.clone(), encrypted: false,

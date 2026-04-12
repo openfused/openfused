@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::store::ContextStore;
+use crate::daemon_store::ContextStore;
 use crate::types::*;
 
 // ---------------------------------------------------------------------------
@@ -714,7 +714,7 @@ async fn receive_inbox(
         .await
         .map(|c| c.name)
         .unwrap_or_else(|| "unknown".to_string());
-    let sender_fp = &openfused_core::crypto::sha256_fingerprint_short(public_key);
+    let sender_fp = &openfused::crypto::sha256_fingerprint_short(public_key);
     let ts = chrono::Utc::now()
         .to_rfc3339()
         .replace([':', '.'], "-");
@@ -776,7 +776,7 @@ async fn get_outbox(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let requester_fp = openfused_core::crypto::sha256_fingerprint_short(pubkey_hex).to_uppercase();
+    let requester_fp = openfused::crypto::sha256_fingerprint_short(pubkey_hex).to_uppercase();
 
     let outbox_dir = store.root.join("outbox");
     let mut messages = vec![];
@@ -924,7 +924,7 @@ async fn ack_outbox(
         let expected_prefix = format!("{}-", safe_name);
         if subdir.starts_with(&expected_prefix) {
             let dir_fp = &subdir[expected_prefix.len()..];
-            let requester_fp = openfused_core::crypto::sha256_fingerprint_short(pubkey_hex).to_uppercase();
+            let requester_fp = openfused::crypto::sha256_fingerprint_short(pubkey_hex).to_uppercase();
             if !dir_fp.eq_ignore_ascii_case(&requester_fp) {
                 tracing::warn!(
                     "ACK fingerprint mismatch: dir={}, requester={}",
@@ -980,7 +980,7 @@ async fn verify_key_ownership(store: &Arc<ContextStore>, name: &str, pubkey_hex:
 }
 
 fn verify_challenge(challenge: &str, sig_b64: &str, pubkey_hex: &str) -> bool {
-    openfused_core::crypto::verify_ed25519_signature(challenge.as_bytes(), sig_b64, pubkey_hex)
+    openfused::crypto::verify_ed25519_signature(challenge.as_bytes(), sig_b64, pubkey_hex)
 }
 
 fn verify_signature(
@@ -991,7 +991,7 @@ fn verify_signature(
     pubkey_hex: &str,
 ) -> bool {
     let payload = format!("{}\n{}\n{}", from, timestamp, message);
-    openfused_core::crypto::verify_ed25519_signature(payload.as_bytes(), sig_b64, pubkey_hex)
+    openfused::crypto::verify_ed25519_signature(payload.as_bytes(), sig_b64, pubkey_hex)
 }
 
 // ---------------------------------------------------------------------------

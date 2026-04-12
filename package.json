@@ -22,7 +22,7 @@
   "scripts": {
     "build": "npm run build:wasm && tsc",
     "build:ts": "tsc",
-    "build:wasm": "cd rust-port && cargo build --target wasm32-wasip1 -p openfused-core --release && cp target/wasm32-wasip1/release/openfused-core.wasm ../wasm/ && (wasm-opt -Oz ../wasm/openfused-core.wasm -o ../wasm/openfused-core.wasm 2>/dev/null || true)",
+    "build:wasm": "cd rust-port && cargo build --target wasm32-wasip1 --bin openfused-core --no-default-features --release && cp target/wasm32-wasip1/release/openfused-core.wasm ../wasm/ && (wasm-opt -Oz ../wasm/openfused-core.wasm -o ../wasm/openfused-core.wasm 2>/dev/null || true)",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build",
     "start": "node dist/cli.js"

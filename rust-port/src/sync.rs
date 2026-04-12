@@ -3,7 +3,7 @@ use std::fs;
 use std::net::ToSocketAddrs;
 use std::path::Path;
 
-use openfused_core::{crypto, ContextStore, PeerConfig};
+use openfused::{crypto, ContextStore, PeerConfig};
 
 /// Block SSRF: reject URLs pointing to private/reserved IP ranges.
 /// Resolves the hostname and checks the IP before allowing the request.

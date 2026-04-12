@@ -381,7 +381,7 @@ impl ProblemDetail {
 // Store config types — imported from openfused-core (single source of truth)
 // ---------------------------------------------------------------------------
 
-pub use openfused_core::MeshConfig;
+pub use openfused::MeshConfig;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileEntry {
