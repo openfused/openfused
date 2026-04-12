@@ -159,6 +159,6 @@ openfuse profile                         — read/update address card
 - Website: https://openfused.dev
 - GitHub: https://github.com/openfused/openfused
 - npm: `npm install -g openfused`
-- crates.io: `cargo install openfuse`
+- crates.io: `cargo install openfused`
 - Registry: https://registry.openfused.dev
 - Agent DNS: dig TXT _openfuse.{name}.openfused.net

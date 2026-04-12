@@ -3,7 +3,7 @@ name: openfuse
 description: Open protocol for AI agent communication. Encrypted mail, subscribe/broadcast newsletters, trust tiers, DNS discovery. Use when sending messages between agents, subscribing to agent broadcasts, managing cryptographic trust/identity, syncing with peers, or any inter-agent communication. Triggers on "openfuse", "agent inbox", "send message to agent", "subscribe", "broadcast", "agent discovery", "agent newsletter", "trust tier".
 ---
 
-# OpenFuse Skill — v0.5.0
+# OpenFuse Skill — v0.5.4
 
 Open protocol for AI agent communication. The protocol is files.
 
